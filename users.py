@@ -1,8 +1,19 @@
 import logging
+import os
 from dataclasses import dataclass
 
 import psycopg2
+from dotenv import load_dotenv
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+load_dotenv()
+
+PG_HOST = os.getenv('PG_HOST')
+PG_PORT = int(os.getenv('PG_PORT'))
+PG_DATABASE = os.getenv('PG_DATABASE')
+PG_USER = os.getenv('PG_USER')
+PG_PASSWORD = os.getenv('PG_PASSWORD')
+DEVELOP = int(os.getenv('DEVELOP'))
 
 
 @dataclass
@@ -22,14 +33,14 @@ class User:
 
 def connect_psql():
     try:
-        connection = psycopg2.connect(host='93.115.19.207',
-                                      port=5432,
-                                      database='monitor_bot',
-                                      user='monitor_bot',
-                                      password='pCacZt73r0PLFWoO')
+        connection = psycopg2.connect(host=PG_HOST,
+                                      port=PG_PORT,
+                                      database=PG_DATABASE,
+                                      user=PG_USER,
+                                      password=PG_PASSWORD)
         connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
     except psycopg2.Error as error:
-        logging.error(f'PSQL connect ERROR: {error}')
+        logging.error(f'PG connect ERROR: {error}')
         return None
     return connection
 
@@ -45,11 +56,10 @@ def set_notification_level(chat_id, notification_level):
                        f'WHERE chat_id = {chat_id}')
         connection.commit()
     except psycopg2.Error as error:
-        logging.error(f'PSQL query ERROR: {error}')
+        logging.error(f'PG query ERROR: {error}')
         return False
     if connection:
-        if cursor:
-            cursor.close()
+        cursor.close()
         connection.close()
     return True
 
@@ -60,6 +70,9 @@ def get_users():
         return None
     try:
         cursor = connection.cursor()
+        develop_where = str()
+        if DEVELOP:
+            develop_where = 'WHERE users.id = 1'
         cursor.execute('SELECT users.id, '
                        '       users.family, '
                        '       users.name, '
@@ -70,17 +83,18 @@ def get_users():
                        '       users.notification_level '
                        'FROM users '
                        '    JOIN departments '
-                       '        on users.department_id = departments.id')
+                       '        on users.department_id = departments.id '
+                       f'{develop_where} '
+                       'ORDER BY users.id')
         users_data = cursor.fetchall()
     except psycopg2.Error as error:
-        logging.error(f'PSQL query ERROR: {error}')
+        logging.error(f'PG query ERROR: {error}')
         return None
     if connection:
-        if cursor:
-            cursor.close()
+        cursor.close()
         connection.close()
     if not users_data:
-        logging.warning('PSQL users table is empty!')
+        logging.warning('PG users table is empty!')
         return None
     users = list()
     for user_data in users_data:

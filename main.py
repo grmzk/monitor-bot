@@ -1,5 +1,7 @@
 import logging
+import os
 
+from dotenv import load_dotenv
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes)
@@ -10,12 +12,17 @@ from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE,
 from notifier import start_notifier
 from users import get_users, set_notification_level
 
-TOKEN = '6597506711:AAEolGHnOrQ8UsOnfF8Mj6ruCIQy2I9ZKGc'
-
+load_dotenv()
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [%(levelname)s] [%(module)s] %(message)s',
 )
+
+TOKEN = os.getenv('TOKEN')
+DEVELOP = int(os.getenv('DEVELOP'))
+
+if DEVELOP:
+    TOKEN = os.getenv('TOKEN_DEVELOP')
 
 
 def private_access(coroutine):
@@ -50,14 +57,13 @@ def build_menu(buttons, n_cols,
 
 
 @private_access
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def start(update: Update, _) -> None:
     username = update.message.from_user.username
     await update.message.reply_text(f'{username}, здрасти!')
 
 
 @private_access
-async def choose_notifications(update: Update,
-                               context: ContextTypes.DEFAULT_TYPE) -> None:
+async def choose_notifications(update: Update, _) -> None:
     button_list = [
         InlineKeyboardButton(
             NOTIFICATION_LEVELS[OWN_PATIENTS],
@@ -95,6 +101,8 @@ async def set_notifications(update: Update,
             'Установлен уровень уведомлений:\n'
             f'<{NOTIFICATION_LEVELS[notification_level]}>'
         )
+        logging.info(f'User with CHAT_ID={chat_id} '
+                     f'changed notification to {notification_level}')
         return
     await context.bot.send_message(
         chat_id,
@@ -103,6 +111,7 @@ async def set_notifications(update: Update,
 
 
 def main() -> None:
+
     application = Application.builder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("notifications",

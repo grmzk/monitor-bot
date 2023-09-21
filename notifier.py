@@ -1,9 +1,11 @@
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from datetime import datetime
 
 import fdb
+from dotenv import load_dotenv
 from fdb.fbcore import (ISOLATION_LEVEL_READ_COMMITED_RO, Connection,
                         InternalError, isc_info_page_size, isc_info_version)
 from telegram.error import TelegramError
@@ -13,7 +15,18 @@ from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
                        OWN_REANIMATION_HOLE)
 from users import get_users
 
+load_dotenv()
+
 RETRY_TIME = 60
+
+FB_DSN = os.getenv('FB_DSN')
+FB_USER = os.getenv('FB_USER')
+FB_PASSWORD = os.getenv('FB_PASSWORD')
+FB_LIBRARY_NAME = os.getenv('FB_LIBRARY_NAME')
+DEVELOP = int(os.getenv('DEVELOP'))
+
+if DEVELOP:
+    RETRY_TIME = 15
 
 
 class MyConnection(Connection):
@@ -92,12 +105,12 @@ async def send_message(bot, user, message):
         await bot.send_message(user.chat_id, message)
     except TelegramError as error:
         logging.error('Sending message to '
-                      f'{user.get_full_name()} ERROR: {error}')
+                      f'<{user.get_full_name()}> ERROR: {error}')
     else:
-        logging.info(f'Sending message to {user.get_full_name()} SUCCESS')
+        logging.info(f'Sending message to <{user.get_full_name()}> SUCCESS')
 
 
-async def send_messages(bot, patients):
+async def send_messages(bot, patients):  # noqa: C901
     users = get_users()
     message_all = str()
     message_reanimation_hole_all = str()
@@ -145,16 +158,16 @@ async def send_messages(bot, patients):
 def connect_fdb():
     try:
         connection = fdb.connect(
-            dsn='bsmp-big-2:f:/statist/NEW_MED.GDB',
+            dsn=FB_DSN,
             sql_dialect=1,
             charset='WIN1251',
-            user='USR',
-            password='12',
+            user=FB_USER,
+            password=FB_PASSWORD,
             connection_class=MyConnection,
-            fb_library_name='/usr/lib64/libfbclient.so.2'
+            fb_library_name=FB_LIBRARY_NAME
         )
     except Exception as error:
-        logging.error(f'FDB connect ERROR: {error}')
+        logging.error(f'FB connect ERROR: {error}')
         return None
     return connection
 
@@ -168,11 +181,10 @@ def get_max_card_id() -> int:
         cursor.execute('SELECT id FROM main_card ORDER BY id DESC ROWS 1')
         card_id = cursor.fetchall()[0][0]
     except Exception as error:
-        logging.error(f'FDB SQL query ERROR: {error}')
+        logging.error(f'FB query ERROR: {error}')
         return None
     if connection:
-        if cursor:
-            cursor.close()
+        cursor.close()
         connection.close()
     return int(card_id)
 
@@ -180,12 +192,11 @@ def get_max_card_id() -> int:
 async def start_notifier(context: CallbackContext):
     max_card_id = get_max_card_id()
     if not max_card_id:
-        logging.error('notifier not started!')
+        logging.error('NOTIFIER not started!')
         return
-    logging.info('notifier started...')
+    logging.info('NOTIFIER started...')
     while True:
         await asyncio.sleep(RETRY_TIME)
-        # await asyncio.sleep(15)
         connection = connect_fdb()
         if not connection:
             continue
@@ -208,17 +219,16 @@ async def start_notifier(context: CallbackContext):
                 '   LEFT JOIN pacient p ON c.id_pac = p.id '
                 '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
                 f'WHERE c.id > {max_card_id} '
-                # f'WHERE c.id > {max_card_id - 20} '
                 'ORDER BY c.id'
             )
             patients_data = cursor.fetchall()
         except Exception as error:
-            logging.error(f'FDB SQL query ERROR: {error}')
+            logging.error(f'FB query ERROR: {error}')
             continue
         if connection:
-            if cursor:
-                cursor.close()
+            cursor.close()
             connection.close()
+            logging.info('FB query complete SUCCESS')
         if not patients_data:
             continue
         patients = list()
@@ -226,41 +236,3 @@ async def start_notifier(context: CallbackContext):
             patients.append(Patient(*patient_data))
         max_card_id = patients[-1].card_id
         await send_messages(context.bot, patients)
-
-# cursor = db.cursor()
-#             cursor.execute('SELECT c.id,'
-#                            '       c.d_in,'
-#                            '       p.fm,'
-#                            '       p.im,'
-#                            '       p.ot,'
-#                            '       p.dtr,'
-#                            '       p.pol,'
-#                            '       otd.short,'
-#                            '       c.remzal,'
-#                            '       c.dsnapr,'
-#                            '       c.dspriem '
-#                            'FROM main_card c '
-#                            'LEFT JOIN pacient p on c.id_pac = p.id '
-#                            'LEFT JOIN priemnic otd on c.id_priem = otd.id '
-#                            'WHERE c.id_dvig = 10 '
-#                            'ORDER BY c.d_in')
-#                 patients_data = cursor.fetchall()
-#                         except Exception as error:
-#                             logging.error(f'FDB SQL query ERROR: {error}')
-#                             continue
-#                         if not patients_data:
-#                             continue
-#                         patients = list()
-#                         for patient_data in patients_data:
-#                             patients.append(Patient(*patient_data))
-#                         message = 'Пациенты в приемном отделении:\n'
-#                         for patient in patients:
-#                             message += (
-#                                 '```\n'
-#                                 f'Дата поступления: {patient.get_admission_date()}\n'
-#                                 f'Ф.И.О.: {patient.get_full_name()}\n'
-#                                 f'Дата рождения: {patient.get_birthday()}\n'
-#                                 f'Диагноз при поступлении: {patient.admission_diagnosis}\n'
-#                                 '```\n'
-#                             )
-#                         await send_message(message)
