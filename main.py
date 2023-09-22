@@ -1,16 +1,21 @@
 import logging
 import os
+import re
 
 from dotenv import load_dotenv
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup, ReplyKeyboardRemove, Update)
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
-                          ContextTypes)
+                          ContextTypes, ConversationHandler, MessageHandler,
+                          filters)
 
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE,
                        NO_NOTIFICATION, NOTIFICATION_LEVELS, OWN_PATIENTS,
                        OWN_REANIMATION_HOLE)
 from notifier import start_notifier
-from users import get_users, set_notification_level
+from users import (User, get_admin, get_departments, get_enabled_users,
+                   get_users, insert_user, set_enable, set_notification_level)
+from utils import send_message
 
 load_dotenv()
 logging.basicConfig(
@@ -24,24 +29,19 @@ DEVELOP = int(os.getenv('DEVELOP'))
 if DEVELOP:
     TOKEN = os.getenv('TOKEN_DEVELOP')
 
+FAMILY, NAME, SURNAME, PHONE, DEPARTMENT = range(5)
+NEW_USERS = dict()
+
 
 def private_access(coroutine):
     async def coroutine_restrict(update: Update,
                                  context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.message.chat_id
-        users = get_users()
+        users = get_enabled_users()
         for user in users:
             if user.chat_id == chat_id:
                 return await coroutine(update, context)
-        return await update.message.reply_text(
-            '[ДОСТУП ЗАКРЫТ]\n'
-            'Для доступа передайте администратору '
-            'следующую информацию:\n'
-            '- Ф.И.О.\n'
-            '- Телефонный номер\n'
-            '- Отделение\n'
-            f'- CHAT_ID = {chat_id}'
-        )
+        return await update.message.reply_text('[ДОСТУП ЗАКРЫТ]')
     return coroutine_restrict
 
 
@@ -56,10 +56,193 @@ def build_menu(buttons, n_cols,
     return menu
 
 
-@private_access
-async def start(update: Update, _) -> None:
-    username = update.message.from_user.username
-    await update.message.reply_text(f'{username}, здрасти!')
+async def start(update: Update, _) -> int:
+    chat_id = update.message.chat_id
+    users = get_users()
+    for user in users:
+        if user.chat_id == chat_id:
+            await update.message.reply_text(
+                f'Здравствуйте, {user.get_full_name()}!'
+            )
+            return ConversationHandler.END
+    await update.message.reply_text(
+        'Для доступа передайте следующую информацию:\n'
+        '- Ф.И.О.\n'
+        '- Телефонный номер\n'
+        '- Отделение\n\n'
+        'Введите вашу фамилию, если готовы:\n',
+    )
+    return FAMILY
+
+
+async def end_start(_, __):
+    return ConversationHandler.END
+
+
+async def set_family(update: Update, _):
+    chat_id = update.message.chat_id
+    user = update.message.from_user
+    message = update.message.text
+    pattern = re.compile(r'^[А-Я][А-Яа-я \-]*$')
+    if not pattern.match(message):
+        await update.message.reply_text(
+            'Допускается использование только '
+            'букв русского алфавита, дефиса и пробела. '
+            'Начинаться фамилия должна с заглавной буквы.\n'
+            'Попробуйте ещё раз:'
+        )
+        return FAMILY
+    NEW_USERS[chat_id] = dict()
+    NEW_USERS[chat_id]['family'] = message
+    NEW_USERS[chat_id]['telegram_full_name'] = user.full_name
+    logging.info(f'Somebody <{user.full_name}> with CHAT_ID={chat_id} '
+                 f'entered family: {message}')
+    await update.message.reply_text('Отлично. Введите своё имя:')
+    return NAME
+
+
+async def set_name(update: Update, _):
+    chat_id = update.message.chat_id
+    user = update.message.from_user
+    message = update.message.text
+    pattern = re.compile(r'^[А-Я][А-Яа-я \-]*$')
+    if not pattern.match(message):
+        await update.message.reply_text(
+            'Допускается использование только '
+            'букв русского алфавита, дефиса и пробела. '
+            'Начинаться имя должно с заглавной буквы.\n'
+            'Попробуйте ещё раз:'
+        )
+        return NAME
+    NEW_USERS[chat_id]['name'] = message
+    logging.info(f'Somebody <{user.full_name}> with CHAT_ID={chat_id} '
+                 f'entered name: {message}')
+    await update.message.reply_text('Введите своё отчество:')
+    return SURNAME
+
+
+async def set_surname(update: Update, _):
+    chat_id = update.message.chat_id
+    user = update.message.from_user
+    message = update.message.text
+    pattern = re.compile(r'^[А-Я][А-Яа-я \-]*$')
+    if not pattern.match(message):
+        await update.message.reply_text(
+            'Допускается использование только '
+            'букв русского алфавита, дефиса и пробела. '
+            'Начинаться отчество должно с заглавной буквы.\n'
+            'Попробуйте ещё раз:'
+        )
+        return SURNAME
+    NEW_USERS[chat_id]['surname'] = message
+    logging.info(f'Somebody <{user.full_name}> with CHAT_ID={chat_id} '
+                 f'entered surname: {message}')
+    await update.message.reply_text('Введите ваш телефонный номер '
+                                    'в формате: +7XXXXXXXXXX')
+    return PHONE
+
+
+async def set_phone(update: Update, _):
+    chat_id = update.message.chat_id
+    user = update.message.from_user
+    message = update.message.text
+    pattern = re.compile(r'^\+7\d{10}$')
+    if not pattern.match(message):
+        await update.message.reply_text(
+            'Введите номер телефона в формате: +7XXXXXXXXXX\n'
+            'Например: +71234567890\n'
+            'Попробуйте ещё раз:'
+        )
+        return PHONE
+    NEW_USERS[chat_id]['phone'] = message
+    logging.info(f'Somebody <{user.full_name}> with CHAT_ID={chat_id} '
+                 f'entered phone: {message}')
+    departments = get_departments()
+    button_list = list()
+    for department_name, department_id in departments.items():
+        button_list.append(
+            InlineKeyboardButton(department_name)
+        )
+    reply_markup = ReplyKeyboardMarkup(build_menu(button_list, n_cols=2))
+    await update.message.reply_text('Выберите ваше отделение:\n',
+                                    reply_markup=reply_markup)
+    return DEPARTMENT
+
+
+async def set_department(update: Update,
+                         context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.message.chat_id
+    user = update.message.from_user
+    message = update.message.text
+    departments = get_departments()
+    if message not in departments.keys():
+        await update.message.reply_text(
+            'Выберите ваше отделение из списка, который ниже:\n'
+        )
+        return DEPARTMENT
+    NEW_USERS[chat_id]['department'] = departments[message]
+    logging.info(f'Somebody <{user.full_name}> with CHAT_ID={chat_id} '
+                 f'entered department: {message}')
+    user_data = NEW_USERS[chat_id]
+    user = User(family=user_data['family'],
+                name=user_data['name'],
+                surname=user_data['surname'],
+                department=user_data['department'],
+                phone=user_data['phone'],
+                chat_id=chat_id,
+                telegram_full_name=user_data['telegram_full_name'])
+    if insert_user(user):
+        admin = get_admin()
+        button_list = [
+            InlineKeyboardButton(
+                'Активировать',
+                callback_data=f'activate {chat_id}')
+        ]
+        reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+        await send_message(
+            context.bot, admin,
+            'Добавился новый пользователь\n'
+            '============================\n'
+            f'Ф.И.О.: {user.get_full_name()}\n'
+            f'Отделение: {message}\n'
+            f'Телефон: {user.phone}\n'
+            f'CHAT_ID: {chat_id}\n'
+            f'TG Ф.И.О.: {user.telegram_full_name}\n',
+            reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            'Не удалось добавить вашу учетную запись, попробуйте позже '
+            'или свяжитесь с администратором.',
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+    await update.message.reply_text(
+        'Отлично, ваши данные направлены администратору.\n'
+        'Когда ваша учетная запись будет активирована, придёт уведомление.',
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+
+async def activate_user(update: Update,
+                        context: ContextTypes.DEFAULT_TYPE) -> None:
+    user_chat_id = int(update.callback_query.data.split()[-1])
+    chat_id = update.callback_query.message.chat_id
+    if set_enable(user_chat_id):
+        await context.bot.send_message(
+            chat_id,
+            f'Пользователь с CHAT_ID={user_chat_id} АКТИВИРОВАН'
+        )
+        await context.bot.send_message(
+            user_chat_id,
+            '[ВАША УЧЕТНАЯ ЗАПИСЬ АКТИВИРОВАНА]'
+        )
+        return
+    await context.bot.send_message(
+        chat_id,
+        f'Ошибка активации пользователя с CHAT_ID={user_chat_id}'
+    )
 
 
 @private_access
@@ -67,27 +250,26 @@ async def choose_notifications(update: Update, _) -> None:
     button_list = [
         InlineKeyboardButton(
             NOTIFICATION_LEVELS[OWN_PATIENTS],
-            callback_data=f'notifications {OWN_PATIENTS}'),
+            callback_data=f'notification {OWN_PATIENTS}'),
         InlineKeyboardButton(
             NOTIFICATION_LEVELS[OWN_REANIMATION_HOLE],
-            callback_data=f'notifications {OWN_REANIMATION_HOLE}'
+            callback_data=f'notification {OWN_REANIMATION_HOLE}'
         ),
         InlineKeyboardButton(
             NOTIFICATION_LEVELS[ALL_REANIMATION_HOLE],
-            callback_data=f'notifications {ALL_REANIMATION_HOLE}'
+            callback_data=f'notification {ALL_REANIMATION_HOLE}'
         ),
         InlineKeyboardButton(
             NOTIFICATION_LEVELS[ALL_NOTIFICATIONS],
-            callback_data=f'notifications {ALL_NOTIFICATIONS}'
+            callback_data=f'notification {ALL_NOTIFICATIONS}'
         ),
         InlineKeyboardButton(
             NOTIFICATION_LEVELS[NO_NOTIFICATION],
-            callback_data=f'notifications {NO_NOTIFICATION}'
+            callback_data=f'notification {NO_NOTIFICATION}'
         ),
     ]
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-    await update.message.reply_text(text='Выберите уровень уведомлений:\n'
-                                         '=============================',
+    await update.message.reply_text(text='ВЫБЕРИТЕ УРОВЕНЬ УВЕДОМЛЕНИЙ:\n',
                                     reply_markup=reply_markup)
 
 
@@ -113,11 +295,23 @@ async def set_notifications(update: Update,
 def main() -> None:
 
     application = Application.builder().token(TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            FAMILY: [MessageHandler(filters.TEXT, set_family)],
+            NAME: [MessageHandler(filters.TEXT, set_name)],
+            SURNAME: [MessageHandler(filters.TEXT, set_surname)],
+            PHONE: [MessageHandler(filters.TEXT, set_phone)],
+            DEPARTMENT: [MessageHandler(filters.TEXT, set_department)]
+        },
+        fallbacks=[CommandHandler('end_start', end_start)]
+    ))
     application.add_handler(CommandHandler("notifications",
                                            choose_notifications))
-    application.add_handler(CallbackQueryHandler(pattern=r'^notifications \d$',
+    application.add_handler(CallbackQueryHandler(pattern=r'^notification \d$',
                                                  callback=set_notifications))
+    application.add_handler(CallbackQueryHandler(pattern=r'^activate \d+$',
+                                                 callback=activate_user))
     application.job_queue.run_once(start_notifier, 0)
     application.run_polling()
 

@@ -8,12 +8,13 @@ import fdb
 from dotenv import load_dotenv
 from fdb.fbcore import (ISOLATION_LEVEL_READ_COMMITED_RO, Connection,
                         InternalError, isc_info_page_size, isc_info_version)
-from telegram.error import TelegramError
+from telegram import Bot
 from telegram.ext import CallbackContext
 
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
                        OWN_REANIMATION_HOLE)
-from users import get_users
+from users import get_enabled_users
+from utils import send_message
 
 load_dotenv()
 
@@ -100,18 +101,8 @@ class Patient:
         return True
 
 
-async def send_message(bot, user, message):
-    try:
-        await bot.send_message(user.chat_id, message)
-    except TelegramError as error:
-        logging.error('Sending message to '
-                      f'<{user.get_full_name()}> ERROR: {error}')
-    else:
-        logging.info(f'Sending message to <{user.get_full_name()}> SUCCESS')
-
-
-async def send_messages(bot, patients):  # noqa: C901
-    users = get_users()
+async def send_messages(bot: Bot, patients):  # noqa: C901
+    users = get_enabled_users()
     message_all = str()
     message_reanimation_hole_all = str()
     for patient in patients:
