@@ -51,7 +51,7 @@ def connect_psql():
     return connection
 
 
-def select_data(select_query: str) -> list:
+def pg_select_data(select_query: str) -> list:
     connection = connect_psql()
     if not connection:
         return list()
@@ -68,7 +68,7 @@ def select_data(select_query: str) -> list:
     return data
 
 
-def write_data(write_query: str) -> bool:
+def pg_write_data(write_query: str) -> bool:
     connection = connect_psql()
     if not connection:
         return False
@@ -91,7 +91,7 @@ def set_notification_level(chat_id: int, notification_level) -> bool:
         f'SET notification_level = {notification_level} '
         f'WHERE chat_id = {chat_id}'
     )
-    return write_data(write_query)
+    return pg_write_data(write_query)
 
 
 def set_enable(chat_id: int) -> bool:
@@ -100,7 +100,7 @@ def set_enable(chat_id: int) -> bool:
         f'SET enable = true '
         f'WHERE chat_id = {chat_id}'
     )
-    return write_data(write_query)
+    return pg_write_data(write_query)
 
 
 def insert_user(user: User) -> bool:
@@ -114,7 +114,7 @@ def insert_user(user: User) -> bool:
         f'  {user.notification_level}, \'{user.telegram_full_name}\', '
         f'  {user.enable})'
     )
-    return write_data(write_query)
+    return pg_write_data(write_query)
 
 
 def get_users() -> list:
@@ -135,7 +135,7 @@ def get_users() -> list:
         '            = departments.id '
         f'ORDER BY {USERS_TABLE}.id'
     )
-    users_data = select_data(select_query)
+    users_data = pg_select_data(select_query)
     if not users_data:
         logging.warning(f'PG {USERS_TABLE} table is empty!')
         return list()
@@ -159,13 +159,21 @@ def get_admin() -> User:
     return users[0]
 
 
+def get_user(chat_id: int) -> User:
+    users = get_users()
+    for user in users:
+        if user.chat_id == chat_id:
+            return user
+    return None
+
+
 def get_departments() -> dict:
     select_query = (
         'SELECT id, name '
         'FROM departments '
         'ORDER BY id'
     )
-    departments_data = select_data(select_query)
+    departments_data = pg_select_data(select_query)
     if not departments_data:
         logging.warning('PG departments table is empty!')
         return list()

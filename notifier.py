@@ -12,7 +12,7 @@ from telegram import Bot
 from telegram.ext import CallbackContext
 
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
-                       OWN_REANIMATION_HOLE)
+                       OWN_REANIMATION_HOLE, REJECTIONS, STATUSES)
 from users import get_enabled_users
 from utils import send_message
 
@@ -67,8 +67,11 @@ class Patient:
     gender: str
     department: str
     reanimation: str
+    incoming_diagnosis: str
     admission_diagnosis: str
-    primary_diagnosis: str
+    status: int
+    reject: int
+    hospitalization: str
 
     def get_admission_date(self) -> str:
         return self.admission_date.strftime('%d.%m.%Y %H:%M')
@@ -101,25 +104,44 @@ class Patient:
         return True
 
 
+def gen_patient_info(patient: Patient) -> str:
+    reanimation_hole = ''
+    if patient.is_reanimation():
+        reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+    admission_diagnosis = ''
+    if patient.admission_diagnosis:
+        admission_diagnosis = (
+            'Диагноз приёмного отделения:\n'
+            f'{patient.admission_diagnosis}\n'
+        )
+    result = ''
+    if patient.status == 8:
+        result = REJECTIONS.get(patient.reject, f'reject={patient.reject}')
+    elif patient.status == 7:
+        result = f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
+    else:
+        result = STATUSES.get(patient.status, f'status={patient.status}')
+    return (
+        '===========================\n'
+        f'{reanimation_hole}'
+        f'Дата поступления: {patient.get_admission_date()}\n'
+        f'Отделение: {patient.department}\n'
+        f'Ф.И.О.: {patient.get_full_name()}\n'
+        f'Дата рождения: {patient.get_birthday()} '
+        f'[{patient.get_age()}]\n'
+        'Диагноз при поступлении:\n'
+        f'{patient.incoming_diagnosis}\n'
+        f'{admission_diagnosis}'
+        f'Исход: {result}\n'
+    )
+
+
 async def send_messages(bot: Bot, patients):  # noqa: C901
     users = get_enabled_users()
     message_all = str()
     message_reanimation_hole_all = str()
     for patient in patients:
-        reanimation_hole = ''
-        if patient.is_reanimation():
-            reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
-        message = (
-            '===========================\n'
-            f'{reanimation_hole}'
-            f'Дата поступления: {patient.get_admission_date()}\n'
-            f'Отделение: {patient.department}\n'
-            f'Ф.И.О.: {patient.get_full_name()}\n'
-            f'Дата рождения: {patient.get_birthday()} '
-            f'[{patient.get_age()}]\n'
-            'Диагноз при поступлении:\n'
-            f'{patient.admission_diagnosis}\n'
-        )
+        message = gen_patient_info(patient)
         message_all += message
         if patient.is_reanimation():
             message_reanimation_hole_all += message
@@ -180,6 +202,24 @@ def get_max_card_id() -> int:
     return int(card_id)
 
 
+def fb_select_data(select_query: str) -> list:
+    connection = connect_fdb()
+    if not connection:
+        return list()
+    try:
+        cursor = connection.cursor()
+        cursor.execute(select_query)
+        data = cursor.fetchall()
+    except Exception as error:
+        logging.error(f'FB query ERROR: {error}')
+        return list()
+    if connection:
+        cursor.close()
+        connection.close()
+        logging.info('FB query complete SUCCESS')
+    return data
+
+
 async def start_notifier(context: CallbackContext):
     max_card_id = get_max_card_id()
     if not max_card_id:
@@ -188,38 +228,29 @@ async def start_notifier(context: CallbackContext):
     logging.info('NOTIFIER started...')
     while True:
         await asyncio.sleep(RETRY_TIME)
-        connection = connect_fdb()
-        if not connection:
-            continue
-        patients_data: list
-        try:
-            cursor = connection.cursor()
-            cursor.execute(
-                'SELECT c.id,'
-                '       c.d_in,'
-                '       p.fm,'
-                '       p.im,'
-                '       p.ot,'
-                '       p.dtr,'
-                '       p.pol,'
-                '       otd.short,'
-                '       c.remzal,'
-                '       c.dsnapr,'
-                '       c.dspriem '
-                'FROM main_card c '
-                '   LEFT JOIN pacient p ON c.id_pac = p.id '
-                '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
-                f'WHERE c.id > {max_card_id} '
-                'ORDER BY c.id'
-            )
-            patients_data = cursor.fetchall()
-        except Exception as error:
-            logging.error(f'FB query ERROR: {error}')
-            continue
-        if connection:
-            cursor.close()
-            connection.close()
-            logging.info('FB query complete SUCCESS')
+        select_query = (
+            'SELECT c.id,'
+            '       c.d_in,'
+            '       p.fm,'
+            '       p.im,'
+            '       p.ot,'
+            '       p.dtr,'
+            '       p.pol,'
+            '       otd.short,'
+            '       c.remzal,'
+            '       c.dsnapr,'
+            '       c.dspriem, '
+            '       c.id_dvig, '
+            '       c.id_otkaz, '
+            '       hosp_otd.short '
+            'FROM main_card c '
+            '   LEFT JOIN pacient p ON c.id_pac = p.id '
+            '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
+            '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
+            f'WHERE c.id > {max_card_id} '
+            'ORDER BY c.id'
+        )
+        patients_data = fb_select_data(select_query)
         if not patients_data:
             continue
         patients = list()

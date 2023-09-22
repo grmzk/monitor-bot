@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+from datetime import date, datetime, time, timedelta
 
 from dotenv import load_dotenv
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
@@ -12,10 +13,11 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE,
                        NO_NOTIFICATION, NOTIFICATION_LEVELS, OWN_PATIENTS,
                        OWN_REANIMATION_HOLE)
-from notifier import start_notifier
+from notifier import Patient, fb_select_data, gen_patient_info, start_notifier
 from users import (User, get_admin, get_departments, get_enabled_users,
-                   get_users, insert_user, set_enable, set_notification_level)
-from utils import send_message
+                   get_user, get_users, insert_user, set_enable,
+                   set_notification_level)
+from utils import send_message, send_message_all
 
 load_dotenv()
 logging.basicConfig(
@@ -273,6 +275,12 @@ async def choose_notifications(update: Update, _) -> None:
                                     reply_markup=reply_markup)
 
 
+@private_access
+async def send_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message.text.split('/sendall ')[-1]
+    await send_message_all(context.bot, message)
+
+
 async def set_notifications(update: Update,
                             context: ContextTypes.DEFAULT_TYPE) -> None:
     notification_level = int(update.callback_query.data.split()[-1])
@@ -292,9 +300,106 @@ async def set_notifications(update: Update,
     )
 
 
-def main() -> None:
+def get_daily_summary(start_date: date, user: User) -> list:
+    start_datetime = datetime(year=start_date.year,
+                              month=start_date.month,
+                              day=start_date.day,
+                              hour=8,
+                              minute=30)
+    end_datetime = start_datetime + timedelta(days=1)
+    select_query = (
+        'SELECT c.id,'
+        '       c.d_in,'
+        '       p.fm,'
+        '       p.im,'
+        '       p.ot,'
+        '       p.dtr,'
+        '       p.pol,'
+        '       otd.short,'
+        '       c.remzal,'
+        '       c.dsnapr,'
+        '       c.dspriem, '
+        '       c.id_dvig, '
+        '       c.id_otkaz, '
+        '       hosp_otd.short '
+        'FROM main_card c '
+        '   LEFT JOIN pacient p ON c.id_pac = p.id '
+        '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
+        '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
+        f'WHERE ((otd.short = \'{user.department}\') '
+        f'      OR (hosp_otd.short = \'{user.department}\'))'
+        f'  AND (c.d_in >= \'{start_datetime}\') '
+        f'  AND (c.d_in < \'{end_datetime}\') '
+        'ORDER BY c.id'
+    )
+    patients_data = fb_select_data(select_query)
+    patients = list()
+    for patient_data in patients_data:
+        patients.append(Patient(*patient_data))
+    message_list = list()
+    message = (f'ЗА {start_datetime.strftime("%d.%m.%Y")} '
+               f'ОБРАТИЛИСЬ [{user.department}]:\n')
+    hospit_own = 0
+    hospit_other = 0
+    hospit_from_other = 0
+    reanimation_holes = 0
+    for patient in patients:
+        if patient.is_reanimation():
+            reanimation_holes += 1
+        if patient.status == 7:
+            if (patient.department == user.department
+                    and patient.department == patient.hospitalization):
+                hospit_own += 1
+            elif (patient.department == user.department
+                    and patient.department != patient.hospitalization):
+                hospit_other += 1
+            else:
+                hospit_from_other += 1
+        patient_message = gen_patient_info(patient)
+        new_message = message + patient_message
+        if len(new_message) > 4096:
+            message_list.append(message)
+            message = patient_message
+            continue
+        message += patient_message
+    message_list.append(message)
+    message_list.append('===========================\n'
+                        f'ВСЕГО ОБРАТИЛОСЬ: {len(patients)}\n'
+                        f'ГОСПИТАЛИЗАЦИИ СВОИХ: {hospit_own}\n'
+                        f'ГОСПИТАЛИЗАЦИИ ОТ ДРУГИХ: {hospit_from_other}\n'
+                        f'ГОСПИТАЛИЗАЦИИ К ДРУГИМ: {hospit_other}\n'
+                        f'РЕАНИМАЦИОННЫЕ ЗАЛЫ: {reanimation_holes}\n')
+    return message_list
 
+
+@private_access
+async def show_summary_today(update: Update, _) -> None:
+    user = get_user(update.message.chat_id)
+    now = datetime.now()
+    start_date = now.date()
+    if now.time() < time(hour=8, minute=30):
+        start_date -= timedelta(days=1)
+    message_list = get_daily_summary(start_date, user)
+    for message in message_list:
+        await update.message.reply_text(message)
+
+
+@private_access
+async def show_summary_yesterday(update: Update, _) -> None:
+    user = get_user(update.message.chat_id)
+    now = datetime.now()
+    start_date = now.date()
+    if now.time() < time(hour=8, minute=30):
+        start_date -= timedelta(days=1)
+    start_date -= timedelta(days=1)
+    message_list = get_daily_summary(start_date, user)
+    for message in message_list:
+        await update.message.reply_text(message)
+
+
+def main() -> None:
     application = Application.builder().token(TOKEN).build()
+
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
@@ -306,12 +411,21 @@ def main() -> None:
         },
         fallbacks=[CommandHandler('end_start', end_start)]
     ))
+
+    application.add_handler(CommandHandler("sendall",
+                                           send_all))
     application.add_handler(CommandHandler("notifications",
                                            choose_notifications))
+    application.add_handler(CommandHandler("summary_today",
+                                           show_summary_today))
+    application.add_handler(CommandHandler("summary_yesterday",
+                                           show_summary_yesterday))
+
     application.add_handler(CallbackQueryHandler(pattern=r'^notification \d$',
                                                  callback=set_notifications))
     application.add_handler(CallbackQueryHandler(pattern=r'^activate \d+$',
                                                  callback=activate_user))
+
     application.job_queue.run_once(start_notifier, 0)
     application.run_polling()
 
