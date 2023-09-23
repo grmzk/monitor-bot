@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime
 
+import re
 import fdb
 from dotenv import load_dotenv
 from fdb.fbcore import (ISOLATION_LEVEL_READ_COMMITED_RO, Connection,
@@ -146,7 +147,13 @@ async def send_messages(bot: Bot, patients):  # noqa: C901
         if patient.is_reanimation():
             message_reanimation_hole_all += message
         for user in users:
-            if user.department == patient.department:
+            pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+            pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+            if ((user.department == patient.department)
+                    or (pattern_surgery.match(patient.department)
+                        and pattern_surgery.match(user.department))
+                    or (pattern_therapy.match(patient.department)
+                        and pattern_therapy.match(user.department))):
                 if user.notification_level == OWN_PATIENTS:
                     await send_message(bot, user,
                                        'Новый поступивший пациент:\n'

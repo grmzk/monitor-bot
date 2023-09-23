@@ -356,15 +356,15 @@ def get_daily_summary(start_date: date, user: User) -> list:
             else:
                 hospit_from_other += 1
         patient_message = gen_patient_info(patient)
-        new_message = message + patient_message
-        if len(new_message) > 4096:
+        if len(message + patient_message) > 4096:
             message_list.append(message)
             message = patient_message
             continue
         message += patient_message
     message_list.append(message)
     message_list.append('===========================\n'
-                        f'ВСЕГО ОБРАТИЛОСЬ: {len(patients)}\n'
+                        'ВСЕГО ОБРАТИЛОСЬ: '
+                        f'{len(patients) - hospit_from_other}\n'
                         f'ГОСПИТАЛИЗАЦИИ СВОИХ: {hospit_own}\n'
                         f'ГОСПИТАЛИЗАЦИИ ОТ ДРУГИХ: {hospit_from_other}\n'
                         f'ГОСПИТАЛИЗАЦИИ К ДРУГИМ: {hospit_other}\n'
