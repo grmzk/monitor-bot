@@ -33,6 +33,7 @@ if DEVELOP:
 
 FAMILY, NAME, SURNAME, PHONE, DEPARTMENT = range(5)
 NEW_USERS = dict()
+TO_DELETE = dict()
 
 
 def private_access(coroutine):
@@ -373,28 +374,54 @@ def get_daily_summary(start_date: date, user: User) -> list:
 
 
 @private_access
+async def show_summary(update: Update, start_date: date) -> None:
+    chat_id = update.message.chat_id
+    TO_DELETE['summary'] = {chat_id: [update.message]}
+    user = get_user(chat_id)
+    message_list = get_daily_summary(start_date, user)
+    button_list = [
+        InlineKeyboardButton(
+            'Удалить последнюю сводку',
+            callback_data='delete summary')
+    ]
+    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    for message in message_list[:-1]:
+        TO_DELETE['summary'][chat_id].append(
+            await update.message.reply_text(message)
+        )
+    else:
+        TO_DELETE['summary'][chat_id].append(
+            await update.message.reply_text(message_list[-1],
+                                            reply_markup=reply_markup)
+        )
+
+
+@private_access
 async def show_summary_today(update: Update, _) -> None:
-    user = get_user(update.message.chat_id)
     now = datetime.now()
     start_date = now.date()
     if now.time() < time(hour=8, minute=30):
         start_date -= timedelta(days=1)
-    message_list = get_daily_summary(start_date, user)
-    for message in message_list:
-        await update.message.reply_text(message)
+    await show_summary(update, start_date)
 
 
 @private_access
 async def show_summary_yesterday(update: Update, _) -> None:
-    user = get_user(update.message.chat_id)
     now = datetime.now()
     start_date = now.date()
     if now.time() < time(hour=8, minute=30):
         start_date -= timedelta(days=1)
     start_date -= timedelta(days=1)
-    message_list = get_daily_summary(start_date, user)
-    for message in message_list:
-        await update.message.reply_text(message)
+    await show_summary(update, start_date)
+
+
+async def delete_messages(update: Update,
+                          context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.callback_query.message.chat_id
+    delete_key = update.callback_query.data.split()[-1]
+    for message in TO_DELETE[delete_key][chat_id]:
+        await context.bot.delete_message(message.chat_id, message.message_id)
+    TO_DELETE[delete_key][chat_id] = list()
 
 
 def main() -> None:
@@ -425,6 +452,8 @@ def main() -> None:
                                                  callback=set_notifications))
     application.add_handler(CallbackQueryHandler(pattern=r'^activate \d+$',
                                                  callback=activate_user))
+    application.add_handler(CallbackQueryHandler(pattern=r'^delete .+$',
+                                                 callback=delete_messages))
 
     application.job_queue.run_once(start_notifier, 0)
     application.run_polling()

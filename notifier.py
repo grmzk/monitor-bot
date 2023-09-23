@@ -1,10 +1,10 @@
 import asyncio
 import logging
 import os
+import re
 from dataclasses import dataclass
 from datetime import datetime
 
-import re
 import fdb
 from dotenv import load_dotenv
 from fdb.fbcore import (ISOLATION_LEVEL_READ_COMMITED_RO, Connection,
