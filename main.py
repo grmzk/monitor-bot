@@ -50,8 +50,8 @@ def delete_calling_message(coroutine):
     async def wrapper(update: Update,
                       context: ContextTypes.DEFAULT_TYPE):
         message = update.message or update.callback_query.message
-        await context.bot.delete_message(message.chat_id, message.message_id)
         await coroutine(update, context)
+        await context.bot.delete_message(message.chat_id, message.message_id)
     return wrapper
 
 
@@ -85,7 +85,7 @@ async def start(update: Update, _) -> int:
     return FAMILY
 
 
-async def start_end(_, __):
+async def conversation_handler_end(_, __):
     return ConversationHandler.END
 
 
@@ -173,7 +173,8 @@ async def start_phone(update: Update, _):
         button_list.append(
             InlineKeyboardButton(department_name)
         )
-    reply_markup = ReplyKeyboardMarkup(build_menu(button_list, n_cols=2))
+    reply_markup = ReplyKeyboardMarkup(build_menu(button_list, n_cols=2),
+                                       resize_keyboard=True)
     await update.message.reply_text('Выберите ваше отделение:\n',
                                     reply_markup=reply_markup)
     return DEPARTMENT
@@ -347,11 +348,12 @@ def get_daily_summary(start_date: date, user: User) -> list:
                               month=start_date.month,
                               day=start_date.day,
                               hour=8,
-                              minute=30)
+                              minute=0)
     end_datetime = start_datetime + timedelta(days=1)
     select_query = (
         'SELECT c.id,'
         '       c.d_in,'
+        '       c.d_out,'
         '       p.fm,'
         '       p.im,'
         '       p.ot,'
@@ -368,10 +370,19 @@ def get_daily_summary(start_date: date, user: User) -> list:
         '   LEFT JOIN pacient p ON c.id_pac = p.id '
         '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
         '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
-        f'WHERE ((otd.short = \'{user.department}\') '
-        f'      OR (hosp_otd.short = \'{user.department}\'))'
-        f'  AND (c.d_in >= \'{start_datetime}\') '
-        f'  AND (c.d_in < \'{end_datetime}\') '
+        f'WHERE '
+        f'  (((otd.short = \'{user.department}\') '
+        f'          OR (hosp_otd.short = \'{user.department}\'))'
+        f'      AND (c.d_in >= \'{start_datetime}\') '
+        f'      AND (c.d_in < \'{end_datetime}\') '
+        f'      AND NOT (c.d_out > \'{end_datetime}\')) '
+        '   OR '
+        f'  (((otd.short = \'{user.department}\') '
+        f'          OR (hosp_otd.short = \'{user.department}\'))'
+        f'      AND (c.d_in >= \'{start_datetime - timedelta(days=1)}\') '
+        f'      AND (c.d_in < \'{start_datetime}\') '
+        f'      AND ((c.d_out > \'{start_datetime}\')'
+        f'          OR (c.id_dvig = 10))) '
         'ORDER BY c.id'
     )
     patients_data = fb_select_data(select_query)
@@ -414,9 +425,12 @@ def get_daily_summary(start_date: date, user: User) -> list:
     return message_list
 
 
-async def show_summary(update: Update, start_date: date) -> None:
+async def get_summary(update: Update, start_date: date) -> None:
     chat_id = update.message.chat_id
-    TO_DELETE['summary'] = {chat_id: [update.message]}
+    if TO_DELETE.get('summary') and TO_DELETE.get('summary').get(chat_id):
+        TO_DELETE['summary'][chat_id].append(update.message)
+    else:
+        TO_DELETE['summary'] = {chat_id: [update.message]}
     user = get_user(chat_id)
     message_list = get_daily_summary(start_date, user)
     button_list = [
@@ -427,7 +441,8 @@ async def show_summary(update: Update, start_date: date) -> None:
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
     for message in message_list[:-1]:
         TO_DELETE['summary'][chat_id].append(
-            await update.message.reply_text(message)
+            await update.message.reply_text(message,
+                                            reply_markup=ReplyKeyboardRemove())
         )
     else:
         TO_DELETE['summary'][chat_id].append(
@@ -440,19 +455,61 @@ async def show_summary(update: Update, start_date: date) -> None:
 async def show_summary_today(update: Update, _) -> None:
     now = datetime.now()
     start_date = now.date()
-    if now.time() < time(hour=8, minute=30):
+    if now.time() < time(hour=8, minute=0):
         start_date -= timedelta(days=1)
-    await show_summary(update, start_date)
+    await get_summary(update, start_date)
 
 
 @private_access
 async def show_summary_yesterday(update: Update, _) -> None:
     now = datetime.now()
     start_date = now.date()
-    if now.time() < time(hour=8, minute=30):
+    if now.time() < time(hour=8, minute=0):
         start_date -= timedelta(days=1)
     start_date -= timedelta(days=1)
-    await show_summary(update, start_date)
+    await get_summary(update, start_date)
+
+
+@private_access
+async def get_date_for_summary(update: Update, _) -> None:
+    chat_id = update.message.chat_id
+    TO_DELETE['summary'] = {chat_id: [update.message]}
+    dates = list()
+    for n in reversed(range(9)):
+        dates.append(date.today() - timedelta(days=n))
+    button_list = list()
+    for some_date in dates:
+        button_list.append(
+            InlineKeyboardButton(some_date.strftime('%d.%m.%Y'))
+        )
+    reply_markup = ReplyKeyboardMarkup(build_menu(button_list, n_cols=3),
+                                       resize_keyboard=True)
+    TO_DELETE['summary'][chat_id].append(
+        await update.message.reply_text(
+            'Введите дату в формате: dd.mm.YYYY\n'
+            'Например: 01.01.2010\n\n'
+            'Или выберите день из списка',
+            reply_markup=reply_markup
+        )
+    )
+    return 0
+
+
+async def show_summary_date(update: Update, _) -> None:
+    chat_id = update.message.chat_id
+    message = update.message.text
+    pattern = re.compile(r'^\d\d\.\d\d\.\d\d\d\d$')
+    if not pattern.match(message):
+        TO_DELETE['summary'][chat_id].append(
+            await update.message.reply_text(
+                'Дата введена неверно.\n'
+                'Попробуйте ещё раз:'
+            )
+        )
+        return 0
+    start_date = datetime.strptime(message, '%d.%m.%Y').date()
+    await get_summary(update, start_date)
+    return ConversationHandler.END
 
 
 @delete_calling_message
@@ -488,7 +545,15 @@ def main() -> None:
             PHONE: [MessageHandler(filters.TEXT, start_phone)],
             DEPARTMENT: [MessageHandler(filters.TEXT, start_department)]
         },
-        fallbacks=[CommandHandler('end_start', start_end)]
+        fallbacks=[CommandHandler('conversation_handler_end',
+                                  conversation_handler_end)]
+    ))
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler('summary_date',
+                                     get_date_for_summary)],
+        states={0: [MessageHandler(filters.TEXT, show_summary_date)]},
+        fallbacks=[CommandHandler('conversation_handler_end',
+                                  conversation_handler_end)]
     ))
 
     application.add_handler(CommandHandler("sendall",
