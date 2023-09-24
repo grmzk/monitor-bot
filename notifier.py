@@ -74,6 +74,7 @@ class Patient:
     status: int
     reject: int
     hospitalization: str
+    doctor: str
 
     @staticmethod
     def get_date(date: datetime) -> str:
@@ -138,6 +139,11 @@ def gen_patient_info(patient: Patient) -> str:
         result = f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
     else:
         result = STATUSES.get(patient.status, f'status={patient.status}')
+    doctor = ''
+    if patient.doctor:
+        doctor = (
+            f'Врач: {patient.doctor}\n'
+        )
     return (
         '===========================\n'
         f'{reanimation_hole}'
@@ -151,6 +157,7 @@ def gen_patient_info(patient: Patient) -> str:
         f'{patient.incoming_diagnosis}\n'
         f'{admission_diagnosis}'
         f'Исход: {result}\n'
+        f'{doctor}'
     )
 
 
@@ -267,11 +274,15 @@ async def start_notifier(context: CallbackContext):
             '       c.dspriem, '
             '       c.id_dvig, '
             '       c.id_otkaz, '
-            '       hosp_otd.short '
+            '       hosp_otd.short, '
+            '       doc.last_name '
+            '       || \' \' || doc.first_name '
+            '       || \' \' || doc.middle_name '
             'FROM main_card c '
             '   LEFT JOIN pacient p ON c.id_pac = p.id '
             '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
             '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
+            '   LEFT JOIN doctor doc ON c.amb_doc_id = doc.doctor_id '
             f'WHERE c.id > {max_card_id} '
             'ORDER BY c.id'
         )
