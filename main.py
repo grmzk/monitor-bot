@@ -276,27 +276,13 @@ async def send_all(update: Update,
 @delete_calling_message
 @private_access
 async def choose_notifications(update: Update, _) -> None:
-    button_list = [
-        InlineKeyboardButton(
-            NOTIFICATION_TITLES[OWN_PATIENTS],
-            callback_data=f'notification {OWN_PATIENTS}'),
-        InlineKeyboardButton(
-            NOTIFICATION_TITLES[OWN_REANIMATION_HOLE],
-            callback_data=f'notification {OWN_REANIMATION_HOLE}'
-        ),
-        InlineKeyboardButton(
-            NOTIFICATION_TITLES[ALL_REANIMATION_HOLE],
-            callback_data=f'notification {ALL_REANIMATION_HOLE}'
-        ),
-        InlineKeyboardButton(
-            NOTIFICATION_TITLES[ALL_NOTIFICATIONS],
-            callback_data=f'notification {ALL_NOTIFICATIONS}'
-        ),
-        InlineKeyboardButton(
-            NOTIFICATION_TITLES[NO_NOTIFICATION],
-            callback_data=f'notification {NO_NOTIFICATION}'
-        ),
-    ]
+    button_list = list()
+    for notification_level, notification_title in NOTIFICATION_TITLES.items():
+        button_list.append(
+            InlineKeyboardButton(
+                notification_title,
+                callback_data=f'notification {notification_level}')
+        )
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
     await update.message.reply_text(text='ВЫБЕРИТЕ УРОВЕНЬ УВЕДОМЛЕНИЙ:\n',
                                     reply_markup=reply_markup)
