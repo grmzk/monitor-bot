@@ -343,7 +343,7 @@ async def change_department(update: Update,
     )
 
 
-def get_daily_summary(start_date: date, user: User) -> list:
+def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
     start_datetime = datetime(year=start_date.year,
                               month=start_date.month,
                               day=start_date.day,
@@ -371,24 +371,25 @@ def get_daily_summary(start_date: date, user: User) -> list:
         '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
         '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
         f'WHERE '
-        f'  (((otd.short = \'{user.department}\') '
-        f'          OR (hosp_otd.short = \'{user.department}\'))'
-        f'      AND (c.d_in >= \'{start_datetime}\') '
-        f'      AND (c.d_in < \'{end_datetime}\') '
-        f'      AND NOT (c.d_out > \'{end_datetime}\')) '
-        '   OR '
-        f'  (((otd.short = \'{user.department}\') '
-        f'          OR (hosp_otd.short = \'{user.department}\'))'
-        f'      AND (c.d_in >= \'{start_datetime - timedelta(days=1)}\') '
-        f'      AND (c.d_in < \'{start_datetime}\') '
-        f'      AND ((c.d_out > \'{start_datetime}\')'
-        f'          OR (c.id_dvig = 10))) '
+        f'  ((otd.short = \'{user.department}\') '
+        f'          OR (hosp_otd.short = \'{user.department}\')) '
+        f'  AND (c.d_in >= \'{start_datetime - timedelta(days=1)}\') '
+        f'  AND (c.d_in < \'{end_datetime}\') '
         'ORDER BY c.id'
     )
     patients_data = fb_select_data(select_query)
-    patients = list()
+    unsorted_patients = list()
     for patient_data in patients_data:
-        patients.append(Patient(*patient_data))
+        unsorted_patients.append(Patient(*patient_data))
+    patients = list()
+    for patient in unsorted_patients:
+        if (patient.admission_date >= start_datetime
+                and patient.admission_outcome_date < end_datetime):
+            patients.append(patient)
+        elif (patient.admission_date < start_datetime
+              and (patient.admission_outcome_date >= start_datetime
+                   or patient.status == 10)):
+            patients.append(patient)
     message_list = list()
     message = (f'ЗА {start_datetime.strftime("%d.%m.%Y")} '
                f'ОБРАТИЛИСЬ [{user.department}]:\n')
@@ -451,22 +452,22 @@ async def get_summary(update: Update, start_date: date) -> None:
         )
 
 
+def get_diary_today() -> date:
+    diary_today = date.today()
+    if datetime.now().time() < time(hour=8, minute=0):
+        diary_today -= timedelta(days=1)
+    return diary_today
+
+
 @private_access
 async def show_summary_today(update: Update, _) -> None:
-    now = datetime.now()
-    start_date = now.date()
-    if now.time() < time(hour=8, minute=0):
-        start_date -= timedelta(days=1)
+    start_date = get_diary_today()
     await get_summary(update, start_date)
 
 
 @private_access
 async def show_summary_yesterday(update: Update, _) -> None:
-    now = datetime.now()
-    start_date = now.date()
-    if now.time() < time(hour=8, minute=0):
-        start_date -= timedelta(days=1)
-    start_date -= timedelta(days=1)
+    start_date = get_diary_today() - timedelta(days=1)
     await get_summary(update, start_date)
 
 
@@ -475,8 +476,8 @@ async def get_date_for_summary(update: Update, _) -> None:
     chat_id = update.message.chat_id
     TO_DELETE['summary'] = {chat_id: [update.message]}
     dates = list()
-    for n in reversed(range(9)):
-        dates.append(date.today() - timedelta(days=n))
+    for n in reversed(range(15)):
+        dates.append(get_diary_today() - timedelta(days=n))
     button_list = list()
     for some_date in dates:
         button_list.append(
@@ -488,7 +489,7 @@ async def get_date_for_summary(update: Update, _) -> None:
         await update.message.reply_text(
             'Введите дату в формате: dd.mm.YYYY\n'
             'Например: 01.01.2010\n\n'
-            'Или выберите день из списка',
+            'Или выберите день из списка:',
             reply_markup=reply_markup
         )
     )
