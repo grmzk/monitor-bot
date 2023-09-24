@@ -85,10 +85,19 @@ def pg_write_data(write_query: str) -> bool:
     return True
 
 
-def set_notification_level(chat_id: int, notification_level) -> bool:
+def set_notification_level(chat_id: int, notification_level: int) -> bool:
     write_query = (
         f'UPDATE {USERS_TABLE} '
         f'SET notification_level = {notification_level} '
+        f'WHERE chat_id = {chat_id}'
+    )
+    return pg_write_data(write_query)
+
+
+def set_department(chat_id: int, department_id: int) -> bool:
+    write_query = (
+        f'UPDATE {USERS_TABLE} '
+        f'SET department_id = {department_id} '
         f'WHERE chat_id = {chat_id}'
     )
     return pg_write_data(write_query)
@@ -179,5 +188,5 @@ def get_departments() -> dict:
         return list()
     departments = dict()
     for department_data in departments_data:
-        departments[department_data[1]] = int(department_data[0])
+        departments[int(department_data[0])] = department_data[1]
     return departments

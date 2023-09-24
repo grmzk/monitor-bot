@@ -15,8 +15,8 @@ from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE,
                        NOTIFICATION_TITLES, OWN_PATIENTS, OWN_REANIMATION_HOLE)
 from notifier import Patient, fb_select_data, gen_patient_info, start_notifier
 from users import (User, get_admin, get_departments, get_enabled_users,
-                   get_user, get_users, insert_user, set_enable,
-                   set_notification_level)
+                   get_user, get_users, insert_user, set_department,
+                   set_enable, set_notification_level)
 from utils import send_message, send_message_all
 
 load_dotenv()
@@ -87,11 +87,11 @@ async def start(update: Update, _) -> int:
     return FAMILY
 
 
-async def end_start(_, __):
+async def start_end(_, __):
     return ConversationHandler.END
 
 
-async def set_family(update: Update, _):
+async def start_family(update: Update, _):
     chat_id = update.message.chat_id
     user = update.message.from_user
     message = update.message.text
@@ -113,7 +113,7 @@ async def set_family(update: Update, _):
     return NAME
 
 
-async def set_name(update: Update, _):
+async def start_name(update: Update, _):
     chat_id = update.message.chat_id
     user = update.message.from_user
     message = update.message.text
@@ -133,7 +133,7 @@ async def set_name(update: Update, _):
     return SURNAME
 
 
-async def set_surname(update: Update, _):
+async def start_surname(update: Update, _):
     chat_id = update.message.chat_id
     user = update.message.from_user
     message = update.message.text
@@ -154,7 +154,7 @@ async def set_surname(update: Update, _):
     return PHONE
 
 
-async def set_phone(update: Update, _):
+async def start_phone(update: Update, _):
     chat_id = update.message.chat_id
     user = update.message.from_user
     message = update.message.text
@@ -171,7 +171,7 @@ async def set_phone(update: Update, _):
                  f'entered phone: {message}')
     departments = get_departments()
     button_list = list()
-    for department_name, department_id in departments.items():
+    for department_name in departments.values():
         button_list.append(
             InlineKeyboardButton(department_name)
         )
@@ -181,25 +181,27 @@ async def set_phone(update: Update, _):
     return DEPARTMENT
 
 
-async def set_department(update: Update,
-                         context: ContextTypes.DEFAULT_TYPE):
+async def start_department(update: Update,
+                           context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     user = update.message.from_user
     message = update.message.text
     departments = get_departments()
-    if message not in departments.keys():
+    if message not in departments.values():
         await update.message.reply_text(
             'Выберите ваше отделение из списка, который ниже:\n'
         )
         return DEPARTMENT
-    NEW_USERS[chat_id]['department'] = departments[message]
+    department_id = list(departments.keys())[list(departments
+                                                  .values()).index(message)]
+    NEW_USERS[chat_id]['department_id'] = department_id
     logging.info(f'Somebody <{user.full_name}> with CHAT_ID={chat_id} '
                  f'entered department: {message}')
     user_data = NEW_USERS[chat_id]
     user = User(family=user_data['family'],
                 name=user_data['name'],
                 surname=user_data['surname'],
-                department=user_data['department'],
+                department=user_data['department_id'],
                 phone=user_data['phone'],
                 chat_id=chat_id,
                 telegram_full_name=user_data['telegram_full_name'])
@@ -248,13 +250,27 @@ async def activate_user(update: Update,
         )
         await context.bot.send_message(
             user_chat_id,
-            '[ВАША УЧЕТНАЯ ЗАПИСЬ АКТИВИРОВАНА]'
+            '[ВАША УЧЕТНАЯ ЗАПИСЬ АКТИВИРОВАНА]\n\n'
+            'Настроить специальный звук для уведомлений '
+            'или включить/выключить звуковые оповещения можно в настройках, '
+            'которые обычно расположены '
+            'в верхней части экрана справа (три вертикальные точки).\n\n'
+            'Также обратите внимание на [МЕНЮ], '
+            'которое расположено в нижней части экрана слева.'
         )
         return
     await context.bot.send_message(
         chat_id,
         f'Ошибка активации пользователя с CHAT_ID={user_chat_id}'
     )
+
+
+@delete_calling_message
+@private_access
+async def send_all(update: Update,
+                   context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message.text.split('/sendall ')[-1]
+    await send_message_all(context.bot, message)
 
 
 @delete_calling_message
@@ -287,15 +303,8 @@ async def choose_notifications(update: Update, _) -> None:
 
 
 @delete_calling_message
-@private_access
-async def send_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    message = update.message.text.split('/sendall ')[-1]
-    await send_message_all(context.bot, message)
-
-
-@delete_calling_message
-async def set_notifications(update: Update,
-                            context: ContextTypes.DEFAULT_TYPE) -> None:
+async def change_notifications(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.callback_query.message.chat_id
     level = int(update.callback_query.data.split()[-1])
     if set_notification_level(chat_id, level):
@@ -311,6 +320,41 @@ async def set_notifications(update: Update,
     await context.bot.send_message(
         chat_id,
         'Не удалось изменить уровень уведомлений, попробуйте позже'
+    )
+
+
+@delete_calling_message
+@private_access
+async def choose_department(update: Update, _) -> None:
+    departments = get_departments()
+    button_list = list()
+    for department_id, department_name in departments.items():
+        button_list.append(
+            InlineKeyboardButton(department_name,
+                                 callback_data=f'department {department_id}')
+        )
+    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=2))
+    await update.message.reply_text(text='ВЫБЕРИТЕ ВАШЕ НОВОЕ ОТДЕЛЕНИЕ:\n',
+                                    reply_markup=reply_markup)
+
+
+@delete_calling_message
+async def change_department(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = update.callback_query.message.chat_id
+    department_id = int(update.callback_query.data.split()[-1])
+    if set_department(chat_id, department_id):
+        departments = get_departments()
+        await context.bot.send_message(
+            chat_id,
+            f'Отделение изменено на [{departments[department_id]}]'
+        )
+        logging.info(f'User with CHAT_ID={chat_id} '
+                     f'changed department to {departments[department_id]}')
+        return
+    await context.bot.send_message(
+        chat_id,
+        'Не удалось изменить отделение, попробуйте позже'
     )
 
 
@@ -427,6 +471,18 @@ async def show_summary_yesterday(update: Update, _) -> None:
     await show_summary(update, start_date)
 
 
+@delete_calling_message
+@private_access
+async def show_settings(update: Update, _) -> None:
+    chat_id = update.message.chat_id
+    user = get_user(chat_id)
+    await update.message.reply_text(
+        'ТЕКУЩИЕ НАСТРОЙКИ\n\n'
+        f'Уведомления: [{NOTIFICATION_TITLES[user.notification_level]}]\n'
+        f'Отделение: [{user.department}]\n'
+    )
+
+
 async def delete_messages(update: Update,
                           context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.callback_query.message.chat_id
@@ -442,13 +498,13 @@ def main() -> None:
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler('start', start)],
         states={
-            FAMILY: [MessageHandler(filters.TEXT, set_family)],
-            NAME: [MessageHandler(filters.TEXT, set_name)],
-            SURNAME: [MessageHandler(filters.TEXT, set_surname)],
-            PHONE: [MessageHandler(filters.TEXT, set_phone)],
-            DEPARTMENT: [MessageHandler(filters.TEXT, set_department)]
+            FAMILY: [MessageHandler(filters.TEXT, start_family)],
+            NAME: [MessageHandler(filters.TEXT, start_name)],
+            SURNAME: [MessageHandler(filters.TEXT, start_surname)],
+            PHONE: [MessageHandler(filters.TEXT, start_phone)],
+            DEPARTMENT: [MessageHandler(filters.TEXT, start_department)]
         },
-        fallbacks=[CommandHandler('end_start', end_start)]
+        fallbacks=[CommandHandler('end_start', start_end)]
     ))
 
     application.add_handler(CommandHandler("sendall",
@@ -459,15 +515,21 @@ def main() -> None:
                                            show_summary_today))
     application.add_handler(CommandHandler("summary_yesterday",
                                            show_summary_yesterday))
+    application.add_handler(CommandHandler("department",
+                                           choose_department))
+    application.add_handler(CommandHandler("settings",
+                                           show_settings))
 
-    application.add_handler(CallbackQueryHandler(pattern=r'^notification \d$',
-                                                 callback=set_notifications))
+    application.add_handler(CallbackQueryHandler(
+        pattern=r'^notification \d$',
+        callback=change_notifications)
+    )
     application.add_handler(CallbackQueryHandler(pattern=r'^activate \d+$',
                                                  callback=activate_user))
     application.add_handler(CallbackQueryHandler(pattern=r'^delete .+$',
                                                  callback=delete_messages))
-    application.add_handler(CallbackQueryHandler(pattern=r'^department .+$',
-                                                 callback=delete_messages))
+    application.add_handler(CallbackQueryHandler(pattern=r'^department \d+$',
+                                                 callback=change_department))
 
     application.job_queue.run_once(start_notifier, 0)
     application.run_polling()
