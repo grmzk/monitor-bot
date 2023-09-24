@@ -119,7 +119,7 @@ def insert_user(user: User) -> bool:
         '   chat_id, notification_level, telegram_full_name, enable) '
         'VALUES '
         f' (\'{user.family}\', \'{user.name}\', \'{user.surname}\', '
-        f'  {user.department}, {user.phone}, {user.chat_id}, '
+        f'  {user.department}, \'{user.phone}\', {user.chat_id}, '
         f'  {user.notification_level}, \'{user.telegram_full_name}\', '
         f'  {user.enable})'
     )
