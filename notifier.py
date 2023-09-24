@@ -28,7 +28,7 @@ FB_LIBRARY_NAME = os.getenv('FB_LIBRARY_NAME')
 DEVELOP = int(os.getenv('DEVELOP'))
 
 if DEVELOP:
-    RETRY_TIME = 15
+    RETRY_TIME = 60
 
 
 class MyConnection(Connection):

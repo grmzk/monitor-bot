@@ -11,8 +11,8 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           filters)
 
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE,
-                       NO_NOTIFICATION, NOTIFICATION_LEVELS, OWN_PATIENTS,
-                       OWN_REANIMATION_HOLE)
+                       NO_NOTIFICATION, NOTIFICATION_DESCRIPTIONS,
+                       NOTIFICATION_TITLES, OWN_PATIENTS, OWN_REANIMATION_HOLE)
 from notifier import Patient, fb_select_data, gen_patient_info, start_notifier
 from users import (User, get_admin, get_departments, get_enabled_users,
                    get_user, get_users, insert_user, set_enable,
@@ -48,6 +48,15 @@ def private_access(coroutine):
     return coroutine_restrict
 
 
+def delete_calling_message(coroutine):
+    async def wrapper(update: Update,
+                      context: ContextTypes.DEFAULT_TYPE):
+        message = update.message or update.callback_query.message
+        await context.bot.delete_message(message.chat_id, message.message_id)
+        await coroutine(update, context)
+    return wrapper
+
+
 def build_menu(buttons, n_cols,
                header_buttons=None,
                footer_buttons=None):
@@ -73,7 +82,7 @@ async def start(update: Update, _) -> int:
         '- Ф.И.О.\n'
         '- Телефонный номер\n'
         '- Отделение\n\n'
-        'Введите вашу фамилию, если готовы:\n',
+        'Введите вашу ФАМИЛИЮ (только ФАМИЛИЮ!):\n',
     )
     return FAMILY
 
@@ -248,26 +257,27 @@ async def activate_user(update: Update,
     )
 
 
+@delete_calling_message
 @private_access
 async def choose_notifications(update: Update, _) -> None:
     button_list = [
         InlineKeyboardButton(
-            NOTIFICATION_LEVELS[OWN_PATIENTS],
+            NOTIFICATION_TITLES[OWN_PATIENTS],
             callback_data=f'notification {OWN_PATIENTS}'),
         InlineKeyboardButton(
-            NOTIFICATION_LEVELS[OWN_REANIMATION_HOLE],
+            NOTIFICATION_TITLES[OWN_REANIMATION_HOLE],
             callback_data=f'notification {OWN_REANIMATION_HOLE}'
         ),
         InlineKeyboardButton(
-            NOTIFICATION_LEVELS[ALL_REANIMATION_HOLE],
+            NOTIFICATION_TITLES[ALL_REANIMATION_HOLE],
             callback_data=f'notification {ALL_REANIMATION_HOLE}'
         ),
         InlineKeyboardButton(
-            NOTIFICATION_LEVELS[ALL_NOTIFICATIONS],
+            NOTIFICATION_TITLES[ALL_NOTIFICATIONS],
             callback_data=f'notification {ALL_NOTIFICATIONS}'
         ),
         InlineKeyboardButton(
-            NOTIFICATION_LEVELS[NO_NOTIFICATION],
+            NOTIFICATION_TITLES[NO_NOTIFICATION],
             callback_data=f'notification {NO_NOTIFICATION}'
         ),
     ]
@@ -276,24 +286,27 @@ async def choose_notifications(update: Update, _) -> None:
                                     reply_markup=reply_markup)
 
 
+@delete_calling_message
 @private_access
 async def send_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message.text.split('/sendall ')[-1]
     await send_message_all(context.bot, message)
 
 
+@delete_calling_message
 async def set_notifications(update: Update,
                             context: ContextTypes.DEFAULT_TYPE) -> None:
-    notification_level = int(update.callback_query.data.split()[-1])
     chat_id = update.callback_query.message.chat_id
-    if set_notification_level(chat_id, notification_level):
+    level = int(update.callback_query.data.split()[-1])
+    if set_notification_level(chat_id, level):
         await context.bot.send_message(
             chat_id,
             'Установлен уровень уведомлений:\n'
-            f'<{NOTIFICATION_LEVELS[notification_level]}>'
+            f'[{NOTIFICATION_TITLES[level]}]\n\n'
+            f'На этом уровне {NOTIFICATION_DESCRIPTIONS[level]}'
         )
         logging.info(f'User with CHAT_ID={chat_id} '
-                     f'changed notification to {notification_level}')
+                     f'changed notification to {level}')
         return
     await context.bot.send_message(
         chat_id,
@@ -373,7 +386,6 @@ def get_daily_summary(start_date: date, user: User) -> list:
     return message_list
 
 
-@private_access
 async def show_summary(update: Update, start_date: date) -> None:
     chat_id = update.message.chat_id
     TO_DELETE['summary'] = {chat_id: [update.message]}
@@ -453,6 +465,8 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(pattern=r'^activate \d+$',
                                                  callback=activate_user))
     application.add_handler(CallbackQueryHandler(pattern=r'^delete .+$',
+                                                 callback=delete_messages))
+    application.add_handler(CallbackQueryHandler(pattern=r'^department .+$',
                                                  callback=delete_messages))
 
     application.job_queue.run_once(start_notifier, 0)

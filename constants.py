@@ -5,12 +5,24 @@ OWN_REANIMATION_HOLE = 2
 ALL_REANIMATION_HOLE = 3
 ALL_NOTIFICATIONS = 4
 
-NOTIFICATION_LEVELS = {
+NOTIFICATION_TITLES = {
     NO_NOTIFICATION: 'Отключить все уведомления',
     OWN_PATIENTS: 'Пациенты своего отделения',
     OWN_REANIMATION_HOLE: 'Реанимационные залы своего отделения',
     ALL_REANIMATION_HOLE: 'Все реанимационные залы',
-    ALL_NOTIFICATIONS: 'Уведомления обо всех пациентах'
+    ALL_NOTIFICATIONS: 'Уведомления о всех пациентах'
+}
+
+NOTIFICATION_DESCRIPTIONS = {
+    NO_NOTIFICATION: 'не будут приходить никакие уведомления',
+    OWN_PATIENTS: 'будут приходить уведомления о всех поступающих '
+                  'за вашим отделением пациентах, включая реанимационные залы',
+    OWN_REANIMATION_HOLE: 'будут приходить уведомления только '
+                          'о реанимационных залах вашего отделения',
+    ALL_REANIMATION_HOLE: 'будут приходить уведомления '
+                          'о реанимационных залах всех отделений',
+    ALL_NOTIFICATIONS: 'будут приходить уведомления о всех '
+                       'поступающих пациентах во все отделения'
 }
 
 STATUSES = {
