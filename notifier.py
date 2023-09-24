@@ -3,7 +3,7 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import MINYEAR, datetime
 
 import fdb
 from dotenv import load_dotenv
@@ -28,7 +28,7 @@ FB_LIBRARY_NAME = os.getenv('FB_LIBRARY_NAME')
 DEVELOP = int(os.getenv('DEVELOP'))
 
 if DEVELOP:
-    RETRY_TIME = 60
+    RETRY_TIME = 15
 
 
 class MyConnection(Connection):
@@ -61,6 +61,7 @@ class MyConnection(Connection):
 class Patient:
     card_id: int
     admission_date: datetime
+    admission_outcome_date: datetime
     family: str
     name: str
     surname: str
@@ -74,8 +75,15 @@ class Patient:
     reject: int
     hospitalization: str
 
+    @staticmethod
+    def get_date(date: datetime) -> str:
+        return date.strftime('%d.%m.%Y %H:%M')
+
     def get_admission_date(self) -> str:
-        return self.admission_date.strftime('%d.%m.%Y %H:%M')
+        return self.get_date(self.admission_date)
+
+    def get_admission_outcome_date(self) -> str:
+        return self.get_date(self.admission_outcome_date)
 
     def get_full_name(self) -> str:
         return f'{self.family} {self.name} {self.surname}'
@@ -104,6 +112,9 @@ class Patient:
             return False
         return True
 
+    def is_outcome(self) -> bool:
+        return self.admission_outcome_date.year != MINYEAR
+
 
 def gen_patient_info(patient: Patient) -> str:
     reanimation_hole = ''
@@ -114,6 +125,11 @@ def gen_patient_info(patient: Patient) -> str:
         admission_diagnosis = (
             'Диагноз приёмного отделения:\n'
             f'{patient.admission_diagnosis}\n'
+        )
+    admission_outcome_date = ''
+    if patient.is_outcome():
+        admission_outcome_date = (
+            f'Дата исхода: {patient.get_admission_outcome_date()}\n'
         )
     result = ''
     if patient.status == 8:
@@ -126,6 +142,7 @@ def gen_patient_info(patient: Patient) -> str:
         '===========================\n'
         f'{reanimation_hole}'
         f'Дата поступления: {patient.get_admission_date()}\n'
+        f'{admission_outcome_date}'
         f'Отделение: {patient.department}\n'
         f'Ф.И.О.: {patient.get_full_name()}\n'
         f'Дата рождения: {patient.get_birthday()} '
@@ -238,6 +255,7 @@ async def start_notifier(context: CallbackContext):
         select_query = (
             'SELECT c.id,'
             '       c.d_in,'
+            '       c.d_out,'
             '       p.fm,'
             '       p.im,'
             '       p.ot,'

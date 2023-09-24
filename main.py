@@ -10,9 +10,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, ConversationHandler, MessageHandler,
                           filters)
 
-from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE,
-                       NO_NOTIFICATION, NOTIFICATION_DESCRIPTIONS,
-                       NOTIFICATION_TITLES, OWN_PATIENTS, OWN_REANIMATION_HOLE)
+from constants import NOTIFICATION_DESCRIPTIONS, NOTIFICATION_TITLES
 from notifier import Patient, fb_select_data, gen_patient_info, start_notifier
 from users import (User, get_admin, get_departments, get_enabled_users,
                    get_user, get_users, insert_user, set_department,
