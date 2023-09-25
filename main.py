@@ -350,6 +350,16 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
                               hour=8,
                               minute=0)
     end_datetime = start_datetime + timedelta(days=1)
+    query_department_arg = f'= \'{user.department}\''
+    user_department = user.department
+    pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+    pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+    if pattern_surgery.match(user.department):
+        user_department = 'ХИРУРГИЯ'
+        query_department_arg = f'LIKE \'% {user_department}\''
+    if pattern_therapy.match(user.department):
+        user_department = 'ТЕРАПИЯ'
+        query_department_arg = f'LIKE \'% {user_department}\''
     select_query = (
         'SELECT c.id,'
         '       c.d_in,'
@@ -375,8 +385,8 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
         '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
         '   LEFT JOIN doctor doc ON c.amb_doc_id = doc.doctor_id '
         f'WHERE '
-        f'  ((otd.short = \'{user.department}\') '
-        f'          OR (hosp_otd.short = \'{user.department}\')) '
+        f'  ((otd.short {query_department_arg}) '
+        f'          OR (hosp_otd.short {query_department_arg})) '
         f'  AND (c.d_in >= \'{start_datetime - timedelta(days=1)}\') '
         f'  AND (c.d_in < \'{end_datetime}\') '
         'ORDER BY c.id'
@@ -396,7 +406,7 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
             patients.append(patient)
     message_list = list()
     message = (f'ЗА {start_datetime.strftime("%d.%m.%Y")} '
-               f'ОБРАТИЛИСЬ [{user.department}]:\n')
+               f'ОБРАТИЛИСЬ [{user_department}]:\n')
     hospit_own = 0
     hospit_other = 0
     hospit_from_other = 0
@@ -410,6 +420,22 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
                 hospit_own += 1
             elif (patient.department == user.department
                     and patient.department != patient.hospitalization):
+                hospit_other += 1
+            elif (pattern_surgery.match(patient.department)
+                    and user_department == 'ХИРУРГИЯ'
+                    and pattern_surgery.match(patient.hospitalization)):
+                hospit_own += 1
+            elif (pattern_surgery.match(patient.department)
+                    and user_department == 'ХИРУРГИЯ'
+                    and not pattern_surgery.match(patient.hospitalization)):
+                hospit_other += 1
+            elif (pattern_therapy.match(patient.department)
+                    and user_department == 'ТЕРАПИЯ'
+                    and pattern_therapy.match(patient.hospitalization)):
+                hospit_own += 1
+            elif (pattern_therapy.match(patient.department)
+                    and user_department == 'ТЕРАПИЯ'
+                    and not pattern_therapy.match(patient.hospitalization)):
                 hospit_other += 1
             else:
                 hospit_from_other += 1
