@@ -1,6 +1,9 @@
 summary_today - Сводка (сегодня)
 summary_yesterday - Сводка (вчера)
 summary_date - Сводка (дата)
+processing_own - Обследуются (свои)
+processing_rean - Обследуются (реан. зал)
+processing_all - Обследуются (все)
 notifications - Настройка уведомлений
 department - Изменить отделение
 settings - Показать текущие настройки

@@ -117,33 +117,37 @@ class Patient:
         return self.admission_outcome_date.year != MINYEAR
 
 
-def gen_patient_info(patient: Patient) -> str:
+def gen_patient_info(patient: Patient, admission=False) -> str:
     reanimation_hole = ''
-    if patient.is_reanimation():
-        reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
-    admission_diagnosis = ''
-    if patient.admission_diagnosis:
-        admission_diagnosis = (
-            'Диагноз приёмного отделения:\n'
-            f'{patient.admission_diagnosis}\n'
-        )
     admission_outcome_date = ''
-    if patient.is_outcome():
-        admission_outcome_date = (
-            f'Дата исхода: {patient.get_admission_outcome_date()}\n'
-        )
+    admission_diagnosis = ''
     result = ''
-    if patient.status == 8:
-        result = REJECTIONS.get(patient.reject, f'reject={patient.reject}')
-    elif patient.status == 7:
-        result = f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
-    else:
-        result = STATUSES.get(patient.status, f'status={patient.status}')
     doctor = ''
-    if patient.doctor:
-        doctor = (
-            f'Врач: {patient.doctor}\n'
-        )
+    if not admission:
+        if patient.is_reanimation():
+            reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+        if patient.is_outcome():
+            admission_outcome_date = (
+                f'Дата исхода: {patient.get_admission_outcome_date()}\n'
+            )
+        if patient.admission_diagnosis:
+            admission_diagnosis = (
+                'Диагноз приёмного отделения:\n'
+                f'{patient.admission_diagnosis}\n'
+            )
+        result = 'Исход: '
+        if patient.status == 8:
+            result += REJECTIONS.get(patient.reject,
+                                     f'reject={patient.reject}')
+        elif patient.status == 7:
+            result += f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
+        else:
+            result += STATUSES.get(patient.status, f'status={patient.status}')
+        result += '\n'
+        if patient.doctor:
+            doctor = (
+                f'Врач: {patient.doctor}\n'
+            )
     return (
         '===========================\n'
         f'{reanimation_hole}'
@@ -156,7 +160,7 @@ def gen_patient_info(patient: Patient) -> str:
         'Диагноз при поступлении:\n'
         f'{patient.incoming_diagnosis}\n'
         f'{admission_diagnosis}'
-        f'Исход: {result}\n'
+        f'{result}'
         f'{doctor}'
     )
 
@@ -166,7 +170,7 @@ async def send_messages(bot: Bot, patients):  # noqa: C901
     message_all = str()
     message_reanimation_hole_all = str()
     for patient in patients:
-        message = gen_patient_info(patient)
+        message = gen_patient_info(patient, admission=True)
         message_all += message
         if patient.is_reanimation():
             message_reanimation_hole_all += message
