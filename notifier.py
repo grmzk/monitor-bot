@@ -9,13 +9,14 @@ import fdb
 from dotenv import load_dotenv
 from fdb.fbcore import (ISOLATION_LEVEL_READ_COMMITED_RO, Connection,
                         InternalError, isc_info_page_size, isc_info_version)
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext
 
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
-                       OWN_REANIMATION_HOLE, REJECTIONS, STATUSES)
-from users import get_enabled_users
-from utils import send_message
+                       OWN_REANIMATION_HOLE, REJECTIONS, STATUS_INPATIENT,
+                       STATUS_OUTPATIENT_MAIN, STATUSES)
+from users import User, get_enabled_users
+from utils import build_menu, send_message
 
 load_dotenv()
 
@@ -59,6 +60,7 @@ class MyConnection(Connection):
 
 @dataclass
 class Patient:
+    patient_id: int
     card_id: int
     admission_date: datetime
     admission_outcome_date: datetime
@@ -116,6 +118,15 @@ class Patient:
     def is_outcome(self) -> bool:
         return self.admission_outcome_date.year != MINYEAR
 
+    def is_own(self, user: User) -> bool:
+        pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+        pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+        return ((user.department == self.department)
+                or (pattern_surgery.match(self.department)
+                    and pattern_surgery.match(user.department))
+                or (pattern_therapy.match(self.department)
+                    and pattern_therapy.match(user.department)))
+
 
 def gen_patient_info(patient: Patient, admission=False) -> str:
     reanimation_hole = ''
@@ -123,9 +134,9 @@ def gen_patient_info(patient: Patient, admission=False) -> str:
     admission_diagnosis = ''
     result = ''
     doctor = ''
+    if patient.is_reanimation():
+        reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
     if not admission:
-        if patient.is_reanimation():
-            reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
         if patient.is_outcome():
             admission_outcome_date = (
                 f'Дата исхода: {patient.get_admission_outcome_date()}\n'
@@ -136,10 +147,10 @@ def gen_patient_info(patient: Patient, admission=False) -> str:
                 f'{patient.admission_diagnosis}\n'
             )
         result = 'Исход: '
-        if patient.status == 8:
+        if patient.status == STATUS_OUTPATIENT_MAIN:
             result += REJECTIONS.get(patient.reject,
                                      f'reject={patient.reject}')
-        elif patient.status == 7:
+        elif patient.status == STATUS_INPATIENT:
             result += f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
         else:
             result += STATUSES.get(patient.status, f'status={patient.status}')
@@ -165,42 +176,37 @@ def gen_patient_info(patient: Patient, admission=False) -> str:
     )
 
 
-async def send_messages(bot: Bot, patients):  # noqa: C901
+async def send_message_with_button(bot: Bot, user: User,
+                                   patient: Patient, message: str) -> None:
+    button_list = [
+        InlineKeyboardButton(
+            'Показать прошлые обращения',
+            callback_data=f'history {patient.patient_id}')
+    ]
+    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    await send_message(bot, user, message, reply_markup=reply_markup)
+
+
+async def send_messages(bot: Bot, patients):
     users = get_enabled_users()
-    message_all = str()
-    message_reanimation_hole_all = str()
     for patient in patients:
-        message = gen_patient_info(patient, admission=True)
-        message_all += message
-        if patient.is_reanimation():
-            message_reanimation_hole_all += message
+        message = 'Новый поступивший пациент:\n'
+        message += gen_patient_info(patient, admission=True)
         for user in users:
-            pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
-            pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
-            if ((user.department == patient.department)
-                    or (pattern_surgery.match(patient.department)
-                        and pattern_surgery.match(user.department))
-                    or (pattern_therapy.match(patient.department)
-                        and pattern_therapy.match(user.department))):
-                if user.notification_level == OWN_PATIENTS:
-                    await send_message(bot, user,
-                                       'Новый поступивший пациент:\n'
-                                       f'{message}')
-                elif (user.notification_level == OWN_REANIMATION_HOLE
-                        and patient.is_reanimation()):
-                    await send_message(bot, user,
-                                       'Новый поступивший пациент:\n'
-                                       f'{message}')
-    for user in users:
-        if user.notification_level == ALL_NOTIFICATIONS:
-            await send_message(bot, user,
-                               'Новые поступившие пациенты:\n'
-                               f'{message_all}')
-        elif (user.notification_level == ALL_REANIMATION_HOLE
-              and message_reanimation_hole_all):
-            await send_message(bot, user,
-                               'Новые поступившие пациенты:\n'
-                               f'{message_reanimation_hole_all}')
+            if user.notification_level == OWN_PATIENTS:
+                if patient.is_own(user):
+                    await send_message_with_button(bot, user, patient, message)
+                continue
+            if user.notification_level == OWN_REANIMATION_HOLE:
+                if patient.is_own(user) and patient.is_reanimation():
+                    await send_message_with_button(bot, user, patient, message)
+                continue
+            if user.notification_level == ALL_REANIMATION_HOLE:
+                if patient.is_reanimation():
+                    await send_message_with_button(bot, user, patient, message)
+                continue
+            if user.notification_level == ALL_NOTIFICATIONS:
+                await send_message_with_button(bot, user, patient, message)
 
 
 def connect_fdb():
@@ -264,17 +270,18 @@ async def start_notifier(context: CallbackContext):
     while True:
         await asyncio.sleep(RETRY_TIME)
         select_query = (
-            'SELECT c.id,'
-            '       c.d_in,'
-            '       c.d_out,'
-            '       p.fm,'
-            '       p.im,'
-            '       p.ot,'
-            '       p.dtr,'
-            '       p.pol,'
-            '       otd.short,'
-            '       c.remzal,'
-            '       c.dsnapr,'
+            'SELECT c.id_pac, '
+            '       c.id, '
+            '       c.d_in, '
+            '       c.d_out, '
+            '       p.fm, '
+            '       p.im, '
+            '       p.ot, '
+            '       p.dtr, '
+            '       p.pol, '
+            '       otd.short, '
+            '       c.remzal, '
+            '       c.dsnapr, '
             '       c.dspriem, '
             '       c.id_dvig, '
             '       c.id_otkaz, '

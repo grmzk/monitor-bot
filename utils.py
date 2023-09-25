@@ -21,3 +21,14 @@ async def send_message_all(bot: Bot, message: str, reply_markup=None):
     users = get_enabled_users()
     for user in users:
         await send_message(bot, user, message, reply_markup)
+
+
+def build_menu(buttons, n_cols,
+               header_buttons=None,
+               footer_buttons=None):
+    menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
+    if header_buttons:
+        menu.insert(0, [header_buttons])
+    if footer_buttons:
+        menu.append([footer_buttons])
+    return menu

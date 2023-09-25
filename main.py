@@ -10,12 +10,18 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, ConversationHandler, MessageHandler,
                           filters)
 
-from constants import NOTIFICATION_DESCRIPTIONS, NOTIFICATION_TITLES
+from constants import (NOTIFICATION_DESCRIPTIONS, NOTIFICATION_TITLES,
+                       REJECTIONS, STATUS_DIS_DIAGNOSIS, STATUS_INPATIENT,
+                       STATUS_OTHER_HOSPITAL, STATUS_OUTPATIENT,
+                       STATUS_OUTPATIENT_MAIN, STATUS_OVER_DIAGNOSIS,
+                       STATUS_PROCESSING, STATUS_SELF_DENIAL,
+                       STATUS_SELF_LEAVE, STATUS_UNREASON_DENY,
+                       STATUS_UNREASON_DIRECTED, STATUSES)
 from notifier import Patient, fb_select_data, gen_patient_info, start_notifier
 from users import (User, get_admin, get_departments, get_enabled_users,
                    get_user, get_users, insert_user, set_department,
                    set_enable, set_notification_level)
-from utils import send_message, send_message_all
+from utils import build_menu, send_message, send_message_all
 
 load_dotenv()
 logging.basicConfig(
@@ -53,17 +59,6 @@ def delete_calling_message(coroutine):
         await coroutine(update, context)
         await context.bot.delete_message(message.chat_id, message.message_id)
     return wrapper
-
-
-def build_menu(buttons, n_cols,
-               header_buttons=None,
-               footer_buttons=None):
-    menu = [buttons[i:i + n_cols] for i in range(0, len(buttons), n_cols)]
-    if header_buttons:
-        menu.insert(0, [header_buttons])
-    if footer_buttons:
-        menu.append([footer_buttons])
-    return menu
 
 
 async def start(update: Update, _) -> int:
@@ -361,17 +356,18 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
         user_department = 'ТЕРАПИЯ'
         query_department_arg = f'LIKE \'% {user_department}\''
     select_query = (
-        'SELECT c.id,'
-        '       c.d_in,'
-        '       c.d_out,'
-        '       p.fm,'
-        '       p.im,'
-        '       p.ot,'
-        '       p.dtr,'
-        '       p.pol,'
-        '       otd.short,'
-        '       c.remzal,'
-        '       c.dsnapr,'
+        'SELECT c.id_pac, '
+        '       c.id, '
+        '       c.d_in, '
+        '       c.d_out, '
+        '       p.fm, '
+        '       p.im, '
+        '       p.ot, '
+        '       p.dtr, '
+        '       p.pol, '
+        '       otd.short, '
+        '       c.remzal, '
+        '       c.dsnapr, '
         '       c.dspriem, '
         '       c.id_dvig, '
         '       c.id_otkaz, '
@@ -402,7 +398,7 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
             patients.append(patient)
         elif (patient.admission_date < start_datetime
               and (patient.admission_outcome_date >= start_datetime
-                   or patient.status == 10)):
+                   or patient.status == STATUS_PROCESSING)):
             patients.append(patient)
     message_list = list()
     message = (f'ЗА {start_datetime.strftime("%d.%m.%Y")} '
@@ -414,7 +410,7 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
     for patient in patients:
         if patient.is_reanimation():
             reanimation_holes += 1
-        if patient.status == 7:
+        if patient.status == STATUS_INPATIENT:
             if (patient.department == user.department
                     and patient.department == patient.hospitalization):
                 hospit_own += 1
@@ -565,7 +561,8 @@ def get_processing_patients_all(user: User) -> list:
     reanimation_time = ((datetime.now() - timedelta(hours=2, minutes=30))
                         .replace(microsecond=0))
     select_query = (
-        'SELECT c.id, '
+        'SELECT c.id_pac, '
+        '       c.id, '
         '       c.d_in, '
         '       c.d_out, '
         '       p.fm, '
@@ -590,7 +587,7 @@ def get_processing_patients_all(user: User) -> list:
         '   LEFT JOIN doctor doc ON c.amb_doc_id = doc.doctor_id '
         f'WHERE '
         f'  (c.d_in >= \'{start_datetime - timedelta(days=1)}\') '
-        f'  AND ((c.id_dvig = 10) '
+        f'  AND ((c.id_dvig = {STATUS_PROCESSING}) '
         f'      OR ((c.remzal <> \'F\') '
         f'          AND (c.d_in >= \'{reanimation_time}\'))) '
         'ORDER BY c.id'
@@ -632,11 +629,7 @@ def get_processing_info_own(user: User) -> list:
     pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
     pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
     for patient in patients_all:
-        if ((user.department == patient.department)
-                or (pattern_surgery.match(patient.department)
-                    and pattern_surgery.match(user.department))
-                or (pattern_therapy.match(patient.department)
-                    and pattern_therapy.match(user.department))):
+        if patient.is_own(user):
             patients.append(patient)
     message_list = list()
     department = user.department
@@ -741,6 +734,141 @@ async def delete_messages(update: Update,
     TO_DELETE[delete_key][chat_id] = list()
 
 
+async def show_history(update: Update,  # noqa: C901
+                       context: ContextTypes.DEFAULT_TYPE) -> None:
+    patient_id = int(update.callback_query.data.split()[-1])
+    select_query = (
+        'SELECT c.id_pac, '
+        '       c.id, '
+        '       c.d_in, '
+        '       c.d_out, '
+        '       p.fm, '
+        '       p.im, '
+        '       p.ot, '
+        '       p.dtr, '
+        '       p.pol, '
+        '       otd.short, '
+        '       c.remzal, '
+        '       c.dsnapr, '
+        '       c.dspriem, '
+        '       c.id_dvig, '
+        '       c.id_otkaz, '
+        '       hosp_otd.short, '
+        '       doc.last_name '
+        '       || \' \' || doc.first_name '
+        '       || \' \' || doc.middle_name '
+        'FROM main_card c '
+        '   LEFT JOIN pacient p ON c.id_pac = p.id '
+        '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
+        '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
+        '   LEFT JOIN doctor doc ON c.amb_doc_id = doc.doctor_id '
+        f'WHERE '
+        f'  c.id_pac = {patient_id} '
+        'ORDER BY c.id'
+    )
+    patients_data = fb_select_data(select_query)
+    history = list()
+    for patient_data in patients_data:
+        history.append(Patient(*patient_data))
+    message_header = ('ВСЕ ОБРАЩЕНИЯ ПАЦИЕНТА\n'
+                      '===========================\n'
+                      f'Ф.И.О.: {history[0].get_full_name()}\n'
+                      f'Дата рождения: {history[0].get_birthday()} '
+                      f'[{history[0].get_age()}]\n')
+    message = ''
+    message_list = [message_header]
+    inpatient = 0
+    outpatient = 0
+    self_denial = 0
+    self_leave = 0
+    unreason_directed = 0
+    reanimation_holes = 0
+    for patient in history:
+        if patient.status == STATUS_INPATIENT:
+            inpatient += 1
+        elif patient.reject == STATUS_OUTPATIENT:
+            outpatient += 1
+        elif patient.reject == STATUS_SELF_DENIAL:
+            self_denial += 1
+        elif patient.reject == STATUS_SELF_LEAVE:
+            self_leave += 1
+        elif (patient.status == STATUS_OTHER_HOSPITAL
+              or patient.reject in [STATUS_OVER_DIAGNOSIS,
+                                    STATUS_DIS_DIAGNOSIS,
+                                    STATUS_UNREASON_DIRECTED,
+                                    STATUS_UNREASON_DENY]):
+            unreason_directed += 1
+        reanimation_hole = ''
+        if patient.is_reanimation():
+            reanimation_holes += 1
+            reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+        admission_diagnosis = ''
+        if patient.admission_diagnosis:
+            admission_diagnosis = (
+                'Диагноз приёмного отделения:\n'
+                f'{patient.admission_diagnosis}\n'
+            )
+        result = 'Исход: '
+        if patient.status == STATUS_OUTPATIENT_MAIN:
+            result += REJECTIONS.get(patient.reject,
+                                     f'reject={patient.reject}')
+        elif patient.status == STATUS_INPATIENT:
+            result += f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
+        else:
+            result += STATUSES.get(patient.status, f'status={patient.status}')
+        result += '\n'
+        doctor = ''
+        if patient.doctor:
+            doctor = (
+                f'Врач: {patient.doctor}\n'
+            )
+        patient_message = (
+            '===========================\n'
+            f'{reanimation_hole}'
+            f'Дата поступления: {patient.get_admission_date()}\n'
+            f'Отделение: {patient.department}\n'
+            f'{admission_diagnosis}'
+            f'{result}'
+            f'{doctor}'
+        )
+        if len(message + patient_message) > 4096:
+            message_list.append(message)
+            message = patient_message
+            continue
+        message += patient_message
+    message_list.append(message)
+    message_footer = (
+        '===========================\n'
+        f'[{history[0].get_full_name()}]\n'
+        f'ВСЕГО ОБРАЩЕНИЙ: {len(history)}\n'
+        f'ГОСПИТАЛИЗАЦИИ: {inpatient}\n'
+        f'РЕАНИМАЦИОННЫЕ ЗАЛЫ: {reanimation_holes}\n'
+        f'АМБУЛАТОРНОЕ ЛЕЧЕНИЕ: {outpatient}\n'
+        f'САМООТКАЗ: {self_denial}\n'
+        f'САМОУХОД: {self_leave}\n'
+        f'НЕОБОСНОВАННО НАПРАВЛЕН: {unreason_directed}\n'
+    )
+    message_list.append(message_footer)
+    chat_id = update.callback_query.message.chat_id
+    TO_DELETE['history'] = {chat_id: list()}
+    button_list = [
+        InlineKeyboardButton(
+            'Удалить историю обращений',
+            callback_data='delete history')
+    ]
+    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    for message in message_list[:-1]:
+        TO_DELETE['history'][chat_id].append(
+            await context.bot.send_message(chat_id, message,
+                                           reply_markup=ReplyKeyboardRemove())
+        )
+    else:
+        TO_DELETE['history'][chat_id].append(
+            await context.bot.send_message(chat_id, message_list[-1],
+                                           reply_markup=reply_markup)
+        )
+
+
 def main() -> None:
     application = Application.builder().token(TOKEN).build()
 
@@ -793,6 +921,8 @@ def main() -> None:
                                                  callback=delete_messages))
     application.add_handler(CallbackQueryHandler(pattern=r'^department \d+$',
                                                  callback=change_department))
+    application.add_handler(CallbackQueryHandler(pattern=r'^history \d+$',
+                                                 callback=show_history))
 
     application.job_queue.run_once(start_notifier, 0)
     application.run_polling()
