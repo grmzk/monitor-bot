@@ -214,7 +214,7 @@ async def start_department(update: Update,
         reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
         await send_message(
             context.bot, admin,
-            'Добавился новый пользователь\n'
+            'ДОБАВИЛСЯ НОВЫЙ ПОЛЬЗОВАТЕЛЬ\n'
             '============================\n'
             f'Ф.И.О.: {user.get_full_name()}\n'
             f'Отделение: {message}\n'
@@ -430,7 +430,7 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
     return message_list
 
 
-async def get_summary(update: Update, start_date: date) -> None:
+async def show_summary(update: Update, start_date: date) -> None:
     chat_id = update.message.chat_id
     if TO_DELETE.get('summary') and TO_DELETE.get('summary').get(chat_id):
         TO_DELETE['summary'][chat_id].append(update.message)
@@ -466,13 +466,13 @@ def get_diary_today() -> date:
 @private_access
 async def show_summary_today(update: Update, _) -> None:
     start_date = get_diary_today()
-    await get_summary(update, start_date)
+    await show_summary(update, start_date)
 
 
 @private_access
 async def show_summary_yesterday(update: Update, _) -> None:
     start_date = get_diary_today() - timedelta(days=1)
-    await get_summary(update, start_date)
+    await show_summary(update, start_date)
 
 
 @private_access
@@ -513,7 +513,7 @@ async def show_summary_date(update: Update, _) -> None:
         )
         return 0
     start_date = datetime.strptime(message, '%d.%m.%Y').date()
-    await get_summary(update, start_date)
+    await show_summary(update, start_date)
     return ConversationHandler.END
 
 
@@ -527,6 +527,183 @@ async def show_settings(update: Update, _) -> None:
         f'Уведомления: [{NOTIFICATION_TITLES[user.notification_level]}]\n'
         f'Отделение: [{user.department}]\n'
     )
+
+
+def get_processing_patients_all(user: User) -> list:
+    start_date = get_diary_today()
+    start_datetime = datetime(year=start_date.year,
+                              month=start_date.month,
+                              day=start_date.day,
+                              hour=8,
+                              minute=0)
+    reanimation_time = ((datetime.now() - timedelta(hours=2, minutes=30))
+                        .replace(microsecond=0))
+    select_query = (
+        'SELECT c.id, '
+        '       c.d_in, '
+        '       c.d_out, '
+        '       p.fm, '
+        '       p.im, '
+        '       p.ot, '
+        '       p.dtr, '
+        '       p.pol, '
+        '       otd.short, '
+        '       c.remzal, '
+        '       c.dsnapr, '
+        '       c.dspriem, '
+        '       c.id_dvig, '
+        '       c.id_otkaz, '
+        '       hosp_otd.short, '
+        '       doc.last_name '
+        '       || \' \' || doc.first_name '
+        '       || \' \' || doc.middle_name '
+        'FROM main_card c '
+        '   LEFT JOIN pacient p ON c.id_pac = p.id '
+        '   LEFT JOIN priemnic otd ON c.id_priem = otd.id '
+        '   LEFT JOIN priemnic hosp_otd ON c.id_gotd = hosp_otd.id '
+        '   LEFT JOIN doctor doc ON c.amb_doc_id = doc.doctor_id '
+        f'WHERE '
+        f'  (c.d_in >= \'{start_datetime - timedelta(days=1)}\') '
+        f'  AND ((c.id_dvig = 10) '
+        f'      OR ((c.remzal <> \'F\') '
+        f'          AND (c.d_in >= \'{reanimation_time}\'))) '
+        'ORDER BY c.id'
+    )
+    patients_data = fb_select_data(select_query)
+    patients_all = list()
+    for patient_data in patients_data:
+        patients_all.append(Patient(*patient_data))
+    return patients_all
+
+
+def get_processing_info_all(user: User) -> list:
+    patients = get_processing_patients_all(user)
+    message_list = list()
+    message_header = 'СЕЙЧАС ОБСЛЕДУЮТСЯ [ВСЕ ОТДЕЛЕНИЯ]\n'
+    message_footer = ('===========================\n'
+                      '[ВСЕ ОТДЕЛЕНИЯ]\n'
+                      f'ВСЕГО ОБСЛЕДУЮТСЯ: {len(patients)}\n')
+    message = message_header
+    reanimation_holes = 0
+    for patient in patients:
+        if patient.is_reanimation():
+            reanimation_holes += 1
+        patient_message = gen_patient_info(patient)
+        if len(message + patient_message) > 4096:
+            message_list.append(message)
+            message = patient_message
+            continue
+        message += patient_message
+    message_list.append(message)
+    message_footer += f'РЕАНИМАЦИОННЫЕ ЗАЛЫ: {reanimation_holes}'
+    message_list.append(message_footer)
+    return message_list
+
+
+def get_processing_info_own(user: User) -> list:
+    patients_all = get_processing_patients_all(user)
+    patients = list()
+    pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+    pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+    for patient in patients_all:
+        if ((user.department == patient.department)
+                or (pattern_surgery.match(patient.department)
+                    and pattern_surgery.match(user.department))
+                or (pattern_therapy.match(patient.department)
+                    and pattern_therapy.match(user.department))):
+            patients.append(patient)
+    message_list = list()
+    department = user.department
+    if pattern_surgery.match(user.department):
+        department = 'ХИРУРГИЯ'
+    elif pattern_therapy.match(user.department):
+        department = 'ТЕРАПИЯ'
+    message_header = f'СЕЙЧАС ОБСЛЕДУЮТСЯ [{department}]\n'
+    message_footer = ('===========================\n'
+                      f'[{department}]\n'
+                      f'ВСЕГО ОБСЛЕДУЮТСЯ: {len(patients)}\n')
+    message = message_header
+    reanimation_holes = 0
+    for patient in patients:
+        if patient.is_reanimation():
+            reanimation_holes += 1
+        patient_message = gen_patient_info(patient)
+        if len(message + patient_message) > 4096:
+            message_list.append(message)
+            message = patient_message
+            continue
+        message += patient_message
+    message_list.append(message)
+    message_footer += f'РЕАНИМАЦИОННЫЕ ЗАЛЫ: {reanimation_holes}'
+    message_list.append(message_footer)
+    return message_list
+
+
+def get_processing_info_rean(user: User) -> list:
+    patients_all = get_processing_patients_all(user)
+    patients = list()
+    for patient in patients_all:
+        if patient.is_reanimation():
+            patients.append(patient)
+    message_list = list()
+    message_header = 'СЕЙЧАС ОБСЛЕДУЮТСЯ [РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+    message_footer = ('===========================\n'
+                      '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+                      f'ВСЕГО ОБСЛЕДУЮТСЯ: {len(patients)}\n')
+    message = message_header
+    for patient in patients:
+        patient_message = gen_patient_info(patient)
+        if len(message + patient_message) > 4096:
+            message_list.append(message)
+            message = patient_message
+            continue
+        message += patient_message
+    message_list.append(message)
+    message_list.append(message_footer)
+    return message_list
+
+
+async def show_processing(update: Update,
+                          message_list: list) -> None:
+    chat_id = update.message.chat_id
+    TO_DELETE['processing'] = {chat_id: [update.message]}
+    button_list = [
+        InlineKeyboardButton(
+            'Удалить последний список',
+            callback_data='delete processing')
+    ]
+    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    for message in message_list[:-1]:
+        TO_DELETE['processing'][chat_id].append(
+            await update.message.reply_text(message,
+                                            reply_markup=ReplyKeyboardRemove())
+        )
+    else:
+        TO_DELETE['processing'][chat_id].append(
+            await update.message.reply_text(message_list[-1],
+                                            reply_markup=reply_markup)
+        )
+
+
+@private_access
+async def show_processing_all(update: Update, _) -> None:
+    user = get_user(update.message.chat_id)
+    message_list = get_processing_info_all(user)
+    await show_processing(update, message_list)
+
+
+@private_access
+async def show_processing_own(update: Update, _) -> None:
+    user = get_user(update.message.chat_id)
+    message_list = get_processing_info_own(user)
+    await show_processing(update, message_list)
+
+
+@private_access
+async def show_processing_rean(update: Update, _) -> None:
+    user = get_user(update.message.chat_id)
+    message_list = get_processing_info_rean(user)
+    await show_processing(update, message_list)
 
 
 async def delete_messages(update: Update,
@@ -561,18 +738,24 @@ def main() -> None:
                                   conversation_handler_end)]
     ))
 
-    application.add_handler(CommandHandler("sendall",
+    application.add_handler(CommandHandler('sendall',
                                            send_all))
-    application.add_handler(CommandHandler("notifications",
+    application.add_handler(CommandHandler('notifications',
                                            choose_notifications))
-    application.add_handler(CommandHandler("summary_today",
+    application.add_handler(CommandHandler('summary_today',
                                            show_summary_today))
-    application.add_handler(CommandHandler("summary_yesterday",
+    application.add_handler(CommandHandler('summary_yesterday',
                                            show_summary_yesterday))
-    application.add_handler(CommandHandler("department",
+    application.add_handler(CommandHandler('department',
                                            choose_department))
-    application.add_handler(CommandHandler("settings",
+    application.add_handler(CommandHandler('settings',
                                            show_settings))
+    application.add_handler(CommandHandler('processing_all',
+                                           show_processing_all))
+    application.add_handler(CommandHandler('processing_own',
+                                           show_processing_own))
+    application.add_handler(CommandHandler('processing_rean',
+                                           show_processing_rean))
 
     application.add_handler(CallbackQueryHandler(
         pattern=r'^notification \d$',
