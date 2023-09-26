@@ -130,12 +130,18 @@ class Patient:
 
 def gen_patient_info(patient: Patient, admission=False) -> str:
     reanimation_hole = ''
+    full_name = patient.get_full_name()
     admission_outcome_date = ''
     admission_diagnosis = ''
     result = ''
     doctor = ''
     if patient.is_reanimation():
         reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+    if not patient.get_full_name().strip():
+        if patient.gender == 'М':
+            full_name = 'НЕИЗВЕСТНЫЙ'
+        else:
+            full_name = 'НЕИЗВЕСТНАЯ'
     if not admission:
         if patient.is_outcome():
             admission_outcome_date = (
@@ -165,7 +171,7 @@ def gen_patient_info(patient: Patient, admission=False) -> str:
         f'Дата поступления: {patient.get_admission_date()}\n'
         f'{admission_outcome_date}'
         f'Отделение: {patient.department}\n'
-        f'Ф.И.О.: {patient.get_full_name()}\n'
+        f'Ф.И.О.: {full_name}\n'
         f'Дата рождения: {patient.get_birthday()} '
         f'[{patient.get_age()}]\n'
         'Диагноз при поступлении:\n'
@@ -184,6 +190,8 @@ async def send_message_with_button(bot: Bot, user: User,
             callback_data=f'history {patient.patient_id}')
     ]
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    if not patient.get_full_name().strip():
+        reply_markup = None
     await send_message(bot, user, message, reply_markup=reply_markup)
 
 

@@ -775,8 +775,8 @@ async def show_history(update: Update,  # noqa: C901
                       f'Ф.И.О.: {history[0].get_full_name()}\n'
                       f'Дата рождения: {history[0].get_birthday()} '
                       f'[{history[0].get_age()}]\n')
-    message = ''
-    message_list = [message_header]
+    message = message_header
+    message_list = list()
     inpatient = 0
     outpatient = 0
     self_denial = 0
