@@ -338,7 +338,7 @@ async def change_department(update: Update,
     )
 
 
-def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
+def get_daily_summary(start_date: date, user: User) -> list:
     start_datetime = datetime(year=start_date.year,
                               month=start_date.month,
                               day=start_date.day,
@@ -400,8 +400,21 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
               and (patient.admission_outcome_date >= start_datetime
                    or patient.status == STATUS_PROCESSING)):
             patients.append(patient)
+    return patients
+
+
+def gen_daily_summary_messages(start_date: date,  # noqa: C901
+                               user: User) -> list:
+    user_department = user.department
+    pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+    pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+    if pattern_surgery.match(user.department):
+        user_department = 'ХИРУРГИЯ'
+    if pattern_therapy.match(user.department):
+        user_department = 'ТЕРАПИЯ'
+    patients = get_daily_summary(start_date, user)
     message_list = list()
-    message = (f'ЗА {start_datetime.strftime("%d.%m.%Y")} '
+    message = (f'ЗА {start_date.strftime("%d.%m.%Y")} '
                f'ОБРАТИЛИСЬ [{user_department}]:\n')
     hospit_own = 0
     hospit_other = 0
@@ -415,23 +428,23 @@ def get_daily_summary(start_date: date, user: User) -> list:  # noqa: C901
                     and patient.department == patient.hospitalization):
                 hospit_own += 1
             elif (patient.department == user.department
-                    and patient.department != patient.hospitalization):
+                  and patient.department != patient.hospitalization):
                 hospit_other += 1
             elif (pattern_surgery.match(patient.department)
-                    and user_department == 'ХИРУРГИЯ'
-                    and pattern_surgery.match(patient.hospitalization)):
+                  and user_department == 'ХИРУРГИЯ'
+                  and pattern_surgery.match(patient.hospitalization)):
                 hospit_own += 1
             elif (pattern_surgery.match(patient.department)
-                    and user_department == 'ХИРУРГИЯ'
-                    and not pattern_surgery.match(patient.hospitalization)):
+                  and user_department == 'ХИРУРГИЯ'
+                  and not pattern_surgery.match(patient.hospitalization)):
                 hospit_other += 1
             elif (pattern_therapy.match(patient.department)
-                    and user_department == 'ТЕРАПИЯ'
-                    and pattern_therapy.match(patient.hospitalization)):
+                  and user_department == 'ТЕРАПИЯ'
+                  and pattern_therapy.match(patient.hospitalization)):
                 hospit_own += 1
             elif (pattern_therapy.match(patient.department)
-                    and user_department == 'ТЕРАПИЯ'
-                    and not pattern_therapy.match(patient.hospitalization)):
+                  and user_department == 'ТЕРАПИЯ'
+                  and not pattern_therapy.match(patient.hospitalization)):
                 hospit_other += 1
             else:
                 hospit_from_other += 1
@@ -459,7 +472,7 @@ async def show_summary(update: Update, start_date: date) -> None:
     else:
         TO_DELETE['summary'] = {chat_id: [update.message]}
     user = get_user(chat_id)
-    message_list = get_daily_summary(start_date, user)
+    message_list = gen_daily_summary_messages(start_date, user)
     button_list = [
         InlineKeyboardButton(
             'Удалить последнюю сводку',
