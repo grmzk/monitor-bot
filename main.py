@@ -18,6 +18,7 @@ from constants import (NOTIFICATION_DESCRIPTIONS, NOTIFICATION_TITLES,
                        STATUS_SELF_LEAVE, STATUS_UNREASON_DENY,
                        STATUS_UNREASON_DIRECTED, STATUSES)
 from notifier import Patient, fb_select_data, gen_patient_info, start_notifier
+from to_delete import ToDelete
 from users import (User, get_admin, get_departments, get_enabled_users,
                    get_user, get_users, insert_user, set_department,
                    set_enable, set_notification_level)
@@ -37,7 +38,6 @@ if DEVELOP:
 
 FAMILY, NAME, SURNAME, PHONE, DEPARTMENT = range(5)
 NEW_USERS = dict()
-TO_DELETE = dict()
 
 
 def private_access(coroutine):
@@ -227,7 +227,10 @@ async def start_department(update: Update,
         return ConversationHandler.END
     await update.message.reply_text(
         'Отлично, ваши данные направлены администратору.\n'
-        'Когда ваша учетная запись будет активирована, придёт уведомление.',
+        'Когда ваша учетная запись будет активирована, придёт уведомление.\n\n'
+        'Если вы заранее не договаривались, то попросите того, '
+        'кто знаком с администратором, отправить сообщение с вашей фамилией '
+        '(это во избежание добавления совсем посторонних людей)',
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
@@ -425,26 +428,26 @@ def gen_daily_summary_messages(start_date: date,  # noqa: C901
             reanimation_holes += 1
         if patient.status == STATUS_INPATIENT:
             if (patient.department == user.department
-                    and patient.department == patient.hospitalization):
+                    and patient.department == patient.inpatient_department):
                 hospit_own += 1
             elif (patient.department == user.department
-                  and patient.department != patient.hospitalization):
+                  and patient.department != patient.inpatient_department):
                 hospit_other += 1
             elif (pattern_surgery.match(patient.department)
                   and user_department == 'ХИРУРГИЯ'
-                  and pattern_surgery.match(patient.hospitalization)):
+                  and pattern_surgery.match(patient.inpatient_department)):
                 hospit_own += 1
             elif (pattern_surgery.match(patient.department)
                   and user_department == 'ХИРУРГИЯ'
-                  and not pattern_surgery.match(patient.hospitalization)):
+                  and not pattern_surgery.match(patient.inpatient_department)):
                 hospit_other += 1
             elif (pattern_therapy.match(patient.department)
                   and user_department == 'ТЕРАПИЯ'
-                  and pattern_therapy.match(patient.hospitalization)):
+                  and pattern_therapy.match(patient.inpatient_department)):
                 hospit_own += 1
             elif (pattern_therapy.match(patient.department)
                   and user_department == 'ТЕРАПИЯ'
-                  and not pattern_therapy.match(patient.hospitalization)):
+                  and not pattern_therapy.match(patient.inpatient_department)):
                 hospit_other += 1
             else:
                 hospit_from_other += 1
@@ -465,30 +468,33 @@ def gen_daily_summary_messages(start_date: date,  # noqa: C901
     return message_list
 
 
-async def show_summary(update: Update, start_date: date) -> None:
+async def show_summary(update: Update,
+                       start_date: date) -> None:
     chat_id = update.message.chat_id
-    if TO_DELETE.get('summary') and TO_DELETE.get('summary').get(chat_id):
-        TO_DELETE['summary'][chat_id].append(update.message)
-    else:
-        TO_DELETE['summary'] = {chat_id: [update.message]}
+    to_delete = ToDelete(chat_id=chat_id)
     user = get_user(chat_id)
     message_list = gen_daily_summary_messages(start_date, user)
     button_list = [
         InlineKeyboardButton(
-            'Удалить последнюю сводку',
-            callback_data='delete summary')
+            'Удалить сводку',
+            callback_data=f'delete {to_delete.to_delete_id}')
     ]
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
     for message in message_list[:-1]:
-        TO_DELETE['summary'][chat_id].append(
-            await update.message.reply_text(message,
-                                            reply_markup=ReplyKeyboardRemove())
+        to_delete.add(
+            await update.message.reply_text(
+                message,
+                reply_markup=ReplyKeyboardRemove()
+            )
         )
     else:
-        TO_DELETE['summary'][chat_id].append(
-            await update.message.reply_text(message_list[-1],
-                                            reply_markup=reply_markup)
+        to_delete.add(
+            await update.message.reply_text(
+                message_list[-1],
+                reply_markup=reply_markup
+            )
         )
+    to_delete.save()
 
 
 def get_diary_today() -> date:
@@ -498,12 +504,14 @@ def get_diary_today() -> date:
     return diary_today
 
 
+@delete_calling_message
 @private_access
 async def show_summary_today(update: Update, _) -> None:
     start_date = get_diary_today()
     await show_summary(update, start_date)
 
 
+@delete_calling_message
 @private_access
 async def show_summary_yesterday(update: Update, _) -> None:
     start_date = get_diary_today() - timedelta(days=1)
@@ -511,9 +519,11 @@ async def show_summary_yesterday(update: Update, _) -> None:
 
 
 @private_access
-async def get_date_for_summary(update: Update, _) -> None:
+async def get_date_from_message(update: Update,
+                                context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.message.chat_id
-    TO_DELETE['summary'] = {chat_id: [update.message]}
+    to_delete = ToDelete(chat_id=chat_id)
+    to_delete.add(update.message)
     dates = list()
     for n in reversed(range(15)):
         dates.append(get_diary_today() - timedelta(days=n))
@@ -524,7 +534,7 @@ async def get_date_for_summary(update: Update, _) -> None:
         )
     reply_markup = ReplyKeyboardMarkup(build_menu(button_list, n_cols=3),
                                        resize_keyboard=True)
-    TO_DELETE['summary'][chat_id].append(
+    to_delete.add(
         await update.message.reply_text(
             'Введите дату в формате: dd.mm.YYYY\n'
             'Например: 01.01.2010\n\n'
@@ -532,22 +542,26 @@ async def get_date_for_summary(update: Update, _) -> None:
             reply_markup=reply_markup
         )
     )
+    context.user_data['to_delete'] = to_delete
     return 0
 
 
-async def show_summary_date(update: Update, _) -> None:
-    chat_id = update.message.chat_id
-    message = update.message.text
+async def show_summary_date(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> None:
+    message_text = update.message.text
+    to_delete = context.user_data['to_delete']
+    to_delete.add(update.message)
     pattern = re.compile(r'^\d\d\.\d\d\.\d\d\d\d$')
-    if not pattern.match(message):
-        TO_DELETE['summary'][chat_id].append(
+    if not pattern.match(message_text):
+        to_delete.add(
             await update.message.reply_text(
                 'Дата введена неверно.\n'
                 'Попробуйте ещё раз:'
             )
         )
         return 0
-    start_date = datetime.strptime(message, '%d.%m.%Y').date()
+    await to_delete.final_delete(context.bot)
+    start_date = datetime.strptime(message_text, '%d.%m.%Y').date()
     await show_summary(update, start_date)
     return ConversationHandler.END
 
@@ -698,25 +712,27 @@ def get_processing_info_rean(user: User) -> list:
 async def show_processing(update: Update,
                           message_list: list) -> None:
     chat_id = update.message.chat_id
-    TO_DELETE['processing'] = {chat_id: [update.message]}
+    to_delete = ToDelete(chat_id=chat_id)
     button_list = [
         InlineKeyboardButton(
-            'Удалить последний список',
-            callback_data='delete processing')
+            'Удалить список обследующихся',
+            callback_data=f'delete {to_delete.to_delete_id}')
     ]
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
     for message in message_list[:-1]:
-        TO_DELETE['processing'][chat_id].append(
+        to_delete.add(
             await update.message.reply_text(message,
                                             reply_markup=ReplyKeyboardRemove())
         )
     else:
-        TO_DELETE['processing'][chat_id].append(
+        to_delete.add(
             await update.message.reply_text(message_list[-1],
                                             reply_markup=reply_markup)
         )
+    to_delete.save()
 
 
+@delete_calling_message
 @private_access
 async def show_processing_all(update: Update, _) -> None:
     user = get_user(update.message.chat_id)
@@ -724,6 +740,7 @@ async def show_processing_all(update: Update, _) -> None:
     await show_processing(update, message_list)
 
 
+@delete_calling_message
 @private_access
 async def show_processing_own(update: Update, _) -> None:
     user = get_user(update.message.chat_id)
@@ -731,6 +748,7 @@ async def show_processing_own(update: Update, _) -> None:
     await show_processing(update, message_list)
 
 
+@delete_calling_message
 @private_access
 async def show_processing_rean(update: Update, _) -> None:
     user = get_user(update.message.chat_id)
@@ -740,11 +758,9 @@ async def show_processing_rean(update: Update, _) -> None:
 
 async def delete_messages(update: Update,
                           context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = update.callback_query.message.chat_id
-    delete_key = update.callback_query.data.split()[-1]
-    for message in TO_DELETE[delete_key][chat_id]:
-        await context.bot.delete_message(message.chat_id, message.message_id)
-    TO_DELETE[delete_key][chat_id] = list()
+    to_delete_id = update.callback_query.data.split()[-1]
+    to_delete = ToDelete(to_delete_id=to_delete_id)
+    await to_delete.final_delete(context.bot)
 
 
 async def show_history(update: Update,  # noqa: C901
@@ -826,7 +842,7 @@ async def show_history(update: Update,  # noqa: C901
             result += REJECTIONS.get(patient.reject,
                                      f'reject={patient.reject}')
         elif patient.status == STATUS_INPATIENT:
-            result += f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
+            result += f'ГОСПИТАЛИЗАЦИЯ [{patient.inpatient_department}]'
         else:
             result += STATUSES.get(patient.status, f'status={patient.status}')
         result += '\n'
@@ -863,23 +879,122 @@ async def show_history(update: Update,  # noqa: C901
     )
     message_list.append(message_footer)
     chat_id = update.callback_query.message.chat_id
-    TO_DELETE['history'] = {chat_id: list()}
+    to_delete = ToDelete(chat_id=chat_id)
     button_list = [
         InlineKeyboardButton(
             'Удалить историю обращений',
-            callback_data='delete history')
+            callback_data=f'delete {to_delete.to_delete_id}')
     ]
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
     for message in message_list[:-1]:
-        TO_DELETE['history'][chat_id].append(
+        to_delete.add(
             await context.bot.send_message(chat_id, message,
                                            reply_markup=ReplyKeyboardRemove())
         )
     else:
-        TO_DELETE['history'][chat_id].append(
+        to_delete.add(
             await context.bot.send_message(chat_id, message_list[-1],
                                            reply_markup=reply_markup)
         )
+    to_delete.save()
+
+
+async def show_inpatients(update: Update,  # noqa: C901
+                          start_date: date) -> list:
+    chat_id = update.message.chat_id
+    to_delete = ToDelete(chat_id=chat_id)
+    user = get_user(chat_id)
+    user_department = user.department
+    pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+    pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+    if pattern_surgery.match(user.department):
+        user_department = 'ХИРУРГИЯ'
+    if pattern_therapy.match(user.department):
+        user_department = 'ТЕРАПИЯ'
+    patients = get_daily_summary(start_date, user)
+    inpatients = list()
+    for patient in patients:
+        if patient.is_inpatient_own(user):
+            inpatients.append(patient)
+    message_header = (f'ЗА {start_date.strftime("%d.%m.%Y")} '
+                      f'ГОСПИТАЛИЗИРОВАНО [{user_department}]:\n')
+    to_delete.add(
+        await update.message.reply_text(message_header,
+                                        reply_markup=ReplyKeyboardRemove())
+    )
+    hospit_own = 0
+    hospit_from_other = 0
+    reanimation_holes = 0
+    for patient in inpatients:
+        if patient.is_reanimation():
+            reanimation_holes += 1
+        if patient.is_own(user):
+            hospit_own += 1
+        else:
+            hospit_from_other += 1
+        patient_message = gen_patient_info(patient)
+        button_list = [
+            InlineKeyboardButton(
+                'Показать прошлые обращения',
+                callback_data=f'history {patient.patient_id}')
+        ]
+        reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+        if not patient.get_full_name().strip():
+            reply_markup = None
+        to_delete.add(
+            await update.message.reply_text(patient_message,
+                                            reply_markup=reply_markup)
+        )
+    message_footer = ('===========================\n'
+                      f'ВСЕГО ГОСПИТАЛИЗИРОВАНО: {len(inpatients)}\n'
+                      f'ГОСПИТАЛИЗАЦИИ СВОИХ: {hospit_own}\n'
+                      f'ГОСПИТАЛИЗАЦИИ ОТ ДРУГИХ: {hospit_from_other}\n'
+                      f'РЕАНИМАЦИОННЫЕ ЗАЛЫ: {reanimation_holes}\n')
+    button_list = [
+        InlineKeyboardButton(
+            'Удалить список госпитализаций',
+            callback_data=f'delete {to_delete.to_delete_id}')
+    ]
+    reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
+    to_delete.add(
+        await update.message.reply_text(message_footer,
+                                        reply_markup=reply_markup)
+    )
+    to_delete.save()
+
+
+@delete_calling_message
+@private_access
+async def show_inpatients_today(update: Update, _) -> None:
+    start_date = get_diary_today()
+    await show_inpatients(update, start_date)
+
+
+@delete_calling_message
+@private_access
+async def show_inpatients_yesterday(update: Update, _) -> None:
+    start_date = get_diary_today() - timedelta(days=1)
+    await show_inpatients(update, start_date)
+
+
+async def show_inpatients_date(update: Update,
+                               context: ContextTypes.DEFAULT_TYPE) -> None:
+    message_text = update.message.text
+    to_delete = context.user_data['to_delete']
+    to_delete.add(update.message)
+    pattern = re.compile(r'^\d\d\.\d\d\.\d\d\d\d$')
+    if not pattern.match(message_text):
+        to_delete.add(
+            await update.message.reply_text(
+                'Дата введена неверно.\n'
+                'Попробуйте ещё раз:'
+            )
+        )
+        return 0
+    await to_delete.final_delete(context.bot)
+    start_date = datetime.strptime(message_text, '%d.%m.%Y').date()
+    await show_inpatients(update, start_date)
+    return ConversationHandler.END
 
 
 def main() -> None:
@@ -899,8 +1014,15 @@ def main() -> None:
     ))
     application.add_handler(ConversationHandler(
         entry_points=[CommandHandler('summary_date',
-                                     get_date_for_summary)],
+                                     get_date_from_message)],
         states={0: [MessageHandler(filters.TEXT, show_summary_date)]},
+        fallbacks=[CommandHandler('conversation_handler_end',
+                                  conversation_handler_end)]
+    ))
+    application.add_handler(ConversationHandler(
+        entry_points=[CommandHandler('inpatients_date',
+                                     get_date_from_message)],
+        states={0: [MessageHandler(filters.TEXT, show_inpatients_date)]},
         fallbacks=[CommandHandler('conversation_handler_end',
                                   conversation_handler_end)]
     ))
@@ -923,6 +1045,10 @@ def main() -> None:
                                            show_processing_own))
     application.add_handler(CommandHandler('processing_rean',
                                            show_processing_rean))
+    application.add_handler(CommandHandler('inpatients_today',
+                                           show_inpatients_today))
+    application.add_handler(CommandHandler('inpatients_yesterday',
+                                           show_inpatients_yesterday))
 
     application.add_handler(CallbackQueryHandler(
         pattern=r'^notification \d$',

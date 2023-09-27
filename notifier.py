@@ -75,7 +75,7 @@ class Patient:
     admission_diagnosis: str
     status: int
     reject: int
-    hospitalization: str
+    inpatient_department: str
     doctor: str
 
     @staticmethod
@@ -127,6 +127,18 @@ class Patient:
                 or (pattern_therapy.match(self.department)
                     and pattern_therapy.match(user.department)))
 
+    def is_inpatient_own(self, user: User) -> bool:
+        pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
+        pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+        return ((user.department == self.inpatient_department)
+                or (pattern_surgery.match(str(self.inpatient_department))
+                    and pattern_surgery.match(user.department))
+                or (pattern_therapy.match(str(self.inpatient_department))
+                    and pattern_therapy.match(user.department)))
+
+    def is_inpatient(self) -> bool:
+        return bool(self.inpatient_department)
+
 
 def gen_patient_info(patient: Patient, admission=False) -> str:
     reanimation_hole = ''
@@ -157,7 +169,7 @@ def gen_patient_info(patient: Patient, admission=False) -> str:
             result += REJECTIONS.get(patient.reject,
                                      f'reject={patient.reject}')
         elif patient.status == STATUS_INPATIENT:
-            result += f'ГОСПИТАЛИЗАЦИЯ [{patient.hospitalization}]'
+            result += f'ГОСПИТАЛИЗАЦИЯ [{patient.inpatient_department}]'
         else:
             result += STATUSES.get(patient.status, f'status={patient.status}')
         result += '\n'
