@@ -1,3 +1,7 @@
+# ConversationHandler states
+FAMILY, NAME, SURNAME, PHONE, DEPARTMENT = range(5)
+SHOW = range(1)
+
 # Notification levels
 NO_NOTIFICATION = 0
 OWN_PATIENTS = 1

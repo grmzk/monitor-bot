@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from telegram import Bot, Message
 from telegram.error import BadRequest
 
-from postgresql_db import pg_select_data, pg_write_data
+from databases.postgresql_db import pg_select_data, pg_write_data
 
 load_dotenv()
 
@@ -32,14 +32,14 @@ class ToDelete:
             return
         self.messages_id = list()
         if to_delete_id:
-            select_query = ('SELECT id, chat_id, messages_id '
-                            f'FROM {TO_DELETE_TABLE} '
-                            'WHERE id = %s')
+            select_query = ("SELECT id, chat_id, messages_id "
+                            f"FROM {TO_DELETE_TABLE} "
+                            "WHERE id = %s")
             data = pg_select_data(select_query, [to_delete_id])[0]
             self.to_delete_id, self.chat_id, self.messages_id = data
         elif chat_id:
-            write_query = (f'INSERT INTO {TO_DELETE_TABLE} (chat_id) '
-                           'VALUES (%s)')
+            write_query = (f"INSERT INTO {TO_DELETE_TABLE} (chat_id) "
+                           "VALUES (%s)")
             self.to_delete_id = pg_write_data(write_query, [chat_id])
             self.chat_id = chat_id
 
@@ -54,9 +54,9 @@ class ToDelete:
         return message
 
     def save(self) -> int:
-        write_query = (f'UPDATE {TO_DELETE_TABLE} '
-                       'SET messages_id = %s '
-                       'WHERE id = %s')
+        write_query = (f"UPDATE {TO_DELETE_TABLE} "
+                       "SET messages_id = %s "
+                       "WHERE id = %s")
         return pg_write_data(write_query,
                              [self.messages_id, self.to_delete_id])
 
@@ -73,9 +73,9 @@ class ToDelete:
 
     async def final_delete(self, bot: Bot) -> int:
         await self.delete(bot)
-        write_query = ('DELETE '
-                       f'FROM {TO_DELETE_TABLE} '
-                       'WHERE id = %s')
+        write_query = ("DELETE "
+                       f"FROM {TO_DELETE_TABLE} "
+                       "WHERE id = %s")
         return pg_write_data(write_query, [self.to_delete_id])
 
     def __str__(self) -> str:
