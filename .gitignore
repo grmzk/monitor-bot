@@ -1,4 +1,6 @@
 starter.sh
+firebird-utils-*/
+libfbclient-*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
