@@ -5,7 +5,7 @@ from telegram import Update
 
 from classes.patients import Patient, PatientInfo
 from classes.users import User, get_user
-from constants import STATUS_PROCESSING
+from constants import MESSAGE_MAX_SIZE, STATUS_PROCESSING
 from databases.firebird_db import fb_select_data
 from utils import (delete_calling_message, get_diary_today, private_access,
                    send_message_list)
@@ -82,7 +82,7 @@ def get_processing_info_all() -> List[str]:
         if patient.is_reanimation():
             reanimation_holes += 1
         patient_info = PatientInfo(patient).get_admission_info()
-        if len(message_text + patient_info) > 4096:
+        if len(message_text + patient_info) > MESSAGE_MAX_SIZE:
             message_list.append(message_text)
             message_text = patient_info
             continue
@@ -111,7 +111,7 @@ def get_processing_info_own(user: User) -> List[str]:
         if patient.is_reanimation():
             reanimation_holes += 1
         patient_info = PatientInfo(patient).get_admission_info()
-        if len(message_text + patient_info) > 4096:
+        if len(message_text + patient_info) > MESSAGE_MAX_SIZE:
             message_list.append(message_text)
             message_text = patient_info
             continue
@@ -136,7 +136,7 @@ def get_processing_info_rean() -> List[str]:
     message_text = message_header
     for patient in patients:
         patient_info = PatientInfo(patient).get_admission_info()
-        if len(message_text + patient_info) > 4096:
+        if len(message_text + patient_info) > MESSAGE_MAX_SIZE:
             message_list.append(message_text)
             message_text = patient_info
             continue

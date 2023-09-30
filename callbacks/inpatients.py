@@ -2,8 +2,9 @@ from datetime import date, timedelta
 
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardRemove, Update)
+from telegram.constants import ParseMode
 
-from callbacks.summary import get_daily_summary
+from callbacks.summary import get_summary
 from classes.patients import PatientInfo
 from classes.to_delete import ToDelete
 from classes.users import get_user
@@ -15,7 +16,7 @@ async def show_inpatients(update: Update, start_date: date) -> None:
     chat_id = update.message.chat_id
     to_delete = ToDelete(chat_id=chat_id)
     user = get_user(chat_id)
-    patients = get_daily_summary(start_date, user)
+    patients = get_summary(start_date, user)
     inpatients = list()
     for patient in patients:
         if patient.is_inpatient_own(user):
@@ -49,7 +50,8 @@ async def show_inpatients(update: Update, start_date: date) -> None:
             reply_markup = None
         to_delete.add(
             await update.message.reply_text(patient_info,
-                                            reply_markup=reply_markup)
+                                            reply_markup=reply_markup,
+                                            parse_mode=ParseMode.HTML)
         )
     message_footer = ('===========================\n'
                       f'ВСЕГО ГОСПИТАЛИЗИРОВАНО: {len(inpatients)}\n'

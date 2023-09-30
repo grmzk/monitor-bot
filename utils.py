@@ -4,6 +4,7 @@ from typing import List
 
 from telegram import (Bot, InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardRemove, Update)
+from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
@@ -16,8 +17,10 @@ async def send_message(bot: Bot,
                        message_text: str,
                        reply_markup=None):
     try:
-        await bot.send_message(user.chat_id, message_text,
-                               reply_markup=reply_markup)
+        await bot.send_message(user.chat_id,
+                               message_text,
+                               reply_markup=reply_markup,
+                               parse_mode=ParseMode.HTML)
     except TelegramError as error:
         logging.error('Sending message to '
                       f'<{user.get_full_name()}> ERROR: {error}')
@@ -81,18 +84,26 @@ async def send_message_list(update: Update,
             callback_data=f'delete {to_delete.to_delete_id}')
     ]
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-    for message_text in message_list[:-1]:
-        to_delete.add(
-            await update.message.reply_text(
-                message_text,
-                reply_markup=ReplyKeyboardRemove()
+    try:
+        for message_text in message_list[:-1]:
+            to_delete.add(
+                await update.message.reply_text(
+                    message_text,
+                    reply_markup=ReplyKeyboardRemove(),
+                    parse_mode=ParseMode.HTML
+                )
             )
-        )
+        else:
+            to_delete.add(
+                await update.message.reply_text(
+                    message_list[-1],
+                    reply_markup=reply_markup,
+                    parse_mode=ParseMode.HTML
+                )
+            )
+    except TelegramError as error:
+        logging.error('Sending message_list to '
+                      f'CHAT_ID={chat_id} ERROR: {error}')
     else:
-        to_delete.add(
-            await update.message.reply_text(
-                message_list[-1],
-                reply_markup=reply_markup
-            )
-        )
+        logging.info(f'Sending message_list to CHAT_ID={chat_id} SUCCESS')
     to_delete.save()

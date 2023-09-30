@@ -38,7 +38,7 @@ async def send_message_with_button(bot: Bot, user: User,
 async def send_messages(bot: Bot, patients):
     users = get_enabled_users()
     for patient in patients:
-        message = 'Новый поступивший пациент:\n'
+        message = 'НОВЫЙ ПОСТУПИВШИЙ ПАЦИЕНТ:\n'
         message += PatientInfo(patient).get_admission_info()
         for user in users:
             if user.notification_level == OWN_PATIENTS:

@@ -6,20 +6,20 @@ from telegram import Update
 
 from classes.patients import Patient, PatientInfo
 from classes.users import User, get_user
-from constants import STATUS_INPATIENT
+from constants import MESSAGE_MAX_SIZE, STATUS_INPATIENT
 from notifier import fb_select_data
 from utils import (delete_calling_message, get_diary_today, private_access,
                    send_message_list)
 
 
-def get_daily_summary(start_date: date, user: User) -> List[Patient]:
+def get_summary(start_date: date, user: User) -> List[Patient]:
     start_datetime = datetime(year=start_date.year,
                               month=start_date.month,
                               day=start_date.day,
                               hour=8,
                               minute=0)
     end_datetime = start_datetime + timedelta(days=1)
-    query_department_arg = f'= \'{user.department}\''
+    query_department_arg = f"= '{user.department}'"
     pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
     pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
     if pattern_surgery.match(user.department):
@@ -85,8 +85,8 @@ def get_daily_summary(start_date: date, user: User) -> List[Patient]:
     return patients
 
 
-def gen_daily_summary_messages(start_date: date, user: User) -> List[str]:
-    patients = get_daily_summary(start_date, user)
+def gen_summary_messages(start_date: date, user: User) -> List[str]:
+    patients = get_summary(start_date, user)
     message_list = list()
     message_header = (f'ЗА {start_date.strftime("%d.%m.%Y")} '
                       f'ОБРАТИЛИСЬ [{user.get_admission_department()}]:\n')
@@ -106,7 +106,7 @@ def gen_daily_summary_messages(start_date: date, user: User) -> List[str]:
             else:
                 inpatients_other += 1
         patient_info = PatientInfo(patient).get_full_info()
-        if len(message_text + patient_info) > 4096:
+        if len(message_text + patient_info) > MESSAGE_MAX_SIZE:
             message_list.append(message_text)
             message_text = patient_info
             continue
@@ -126,7 +126,7 @@ def gen_daily_summary_messages(start_date: date, user: User) -> List[str]:
 async def show_summary(update: Update, start_date: date) -> None:
     chat_id = update.message.chat_id
     user = get_user(chat_id)
-    message_list = gen_daily_summary_messages(start_date, user)
+    message_list = gen_summary_messages(start_date, user)
     await send_message_list(
         update,
         message_list,

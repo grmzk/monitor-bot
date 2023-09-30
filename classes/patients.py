@@ -103,41 +103,46 @@ class PatientInfo:
 
     def __init__(self, patient: Patient):
         if patient.is_reanimation():
-            self.reanimation_hole = '[РЕАНИМАЦИОННЫЙ ЗАЛ]\n'
+            self.reanimation_hole = '<u>[РЕАНИМАЦИОННЫЙ ЗАЛ]</u>\n'
         else:
             self.reanimation_hole = ''
         self.admission_date = (
-            f'Дата поступления: {patient.get_admission_date()}\n'
+            f'<u>Дата поступления:</u> {patient.get_admission_date()}\n'
         )
         if patient.is_outcome():
             self.admission_outcome_date = (
-                f'Дата исхода: {patient.get_admission_outcome_date()}\n'
+                '<u>Дата исхода:</u> '
+                f'{patient.get_admission_outcome_date()}\n'
             )
         else:
             self.admission_outcome_date = ''
-        self.department = f'Отделение: {patient.department}\n'
+        self.department = f'<u>Отделение:</u> {patient.department}\n'
         if not patient.get_full_name().strip():
             if patient.gender == 'М':
                 self.full_name = 'НЕИЗВЕСТНЫЙ'
             else:
                 self.full_name = 'НЕИЗВЕСТНАЯ'
         else:
-            self.full_name = f'Ф.И.О.: {patient.get_full_name()}\n'
+            self.full_name = (
+                '<u>Ф.И.О.:</u> '
+                f'{patient.get_full_name()}\n'
+            )
         self.birthday = (
-            f'Дата рождения: {patient.get_birthday()} [{patient.get_age()}]\n'
+            '<u>Дата рождения:</u> '
+            f'{patient.get_birthday()} [{patient.get_age()}]\n'
         )
         self.incoming_diagnosis = (
-            'Диагноз при поступлении:\n'
+            '<u>Диагноз при поступлении:</u>\n'
             f'{patient.incoming_diagnosis}\n'
         )
         if patient.admission_diagnosis:
             self.admission_diagnosis = (
-                'Диагноз приёмного отделения:\n'
+                '<u>Диагноз приёмного отделения:</u>\n'
                 f'{patient.admission_diagnosis}\n'
             )
         else:
             self.admission_diagnosis = ''
-        self.result = 'Исход: '
+        self.result = '<u>Исход:</u> '
         if patient.status == STATUS_OUTPATIENT_MAIN:
             self.result += REJECTIONS.get(patient.reject,
                                           f'reject={patient.reject}')
@@ -148,9 +153,7 @@ class PatientInfo:
                                         f'status={patient.status}')
         self.result += '\n'
         if patient.doctor:
-            self.doctor = (
-                f'Врач: {patient.doctor}\n'
-            )
+            self.doctor = f'<u>Врач:</u> {patient.doctor}\n'
         else:
             self.doctor = ''
 

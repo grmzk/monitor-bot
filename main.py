@@ -92,7 +92,7 @@ def main() -> None:
     )
     application.add_handler(CallbackQueryHandler(pattern=r'^activate \d+$',
                                                  callback=activate_user))
-    application.add_handler(CallbackQueryHandler(pattern=r'^delete .+$',
+    application.add_handler(CallbackQueryHandler(pattern=r'^delete \d+$',
                                                  callback=delete_messages))
     application.add_handler(CallbackQueryHandler(pattern=r'^department \d+$',
                                                  callback=change_department))

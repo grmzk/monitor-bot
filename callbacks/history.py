@@ -2,15 +2,16 @@ from typing import List
 
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardRemove, Update)
+from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
 from classes.patients import Patient, PatientInfo
 from classes.to_delete import ToDelete
-from constants import (STATUS_DIS_DIAGNOSIS, STATUS_INPATIENT,
-                       STATUS_OTHER_HOSPITAL, STATUS_OUTPATIENT,
-                       STATUS_OVER_DIAGNOSIS, STATUS_SELF_DENIAL,
-                       STATUS_SELF_LEAVE, STATUS_UNREASON_DENY,
-                       STATUS_UNREASON_DIRECTED)
+from constants import (MESSAGE_MAX_SIZE, STATUS_DIS_DIAGNOSIS,
+                       STATUS_INPATIENT, STATUS_OTHER_HOSPITAL,
+                       STATUS_OUTPATIENT, STATUS_OVER_DIAGNOSIS,
+                       STATUS_SELF_DENIAL, STATUS_SELF_LEAVE,
+                       STATUS_UNREASON_DENY, STATUS_UNREASON_DIRECTED)
 from databases.firebird_db import fb_select_data
 from utils import build_menu
 
@@ -89,7 +90,7 @@ async def show_history(update: Update,
         if patient.is_reanimation():
             reanimation_holes += 1
         history_info = PatientInfo(patient).get_history_info()
-        if len(message_text + history_info) > 4096:
+        if len(message_text + history_info) > MESSAGE_MAX_SIZE:
             message_list.append(message_text)
             message_text = history_info
             continue
@@ -117,12 +118,16 @@ async def show_history(update: Update,
     reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
     for message_text in message_list[:-1]:
         to_delete.add(
-            await context.bot.send_message(chat_id, message_text,
-                                           reply_markup=ReplyKeyboardRemove())
+            await context.bot.send_message(chat_id,
+                                           message_text,
+                                           reply_markup=ReplyKeyboardRemove(),
+                                           parse_mode=ParseMode.HTML)
         )
     else:
         to_delete.add(
-            await context.bot.send_message(chat_id, message_list[-1],
-                                           reply_markup=reply_markup)
+            await context.bot.send_message(chat_id,
+                                           message_list[-1],
+                                           reply_markup=reply_markup,
+                                           parse_mode=ParseMode.HTML)
         )
     to_delete.save()

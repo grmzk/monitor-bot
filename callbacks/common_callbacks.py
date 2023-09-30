@@ -55,7 +55,7 @@ async def check_date_from_message(update: Update,
             )
         )
         return SHOW
-    await to_delete.final_delete(context.bot)
     start_date = datetime.strptime(message_text, '%d.%m.%Y').date()
     await context.user_data['show_function'](update, start_date)
+    await to_delete.final_delete(context.bot)
     return ConversationHandler.END

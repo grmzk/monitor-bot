@@ -1,3 +1,5 @@
+MESSAGE_MAX_SIZE = 4096
+
 # ConversationHandler states
 FAMILY, NAME, SURNAME, PHONE, DEPARTMENT = range(5)
 SHOW = range(1)
