@@ -119,9 +119,9 @@ class PatientInfo:
         self.department = f'<u>Отделение:</u> {patient.department}\n'
         if not patient.get_full_name().strip():
             if patient.gender == 'М':
-                self.full_name = 'НЕИЗВЕСТНЫЙ'
+                self.full_name = '<u>Ф.И.О.:</u> НЕИЗВЕСТНЫЙ\n'
             else:
-                self.full_name = 'НЕИЗВЕСТНАЯ'
+                self.full_name = '<u>Ф.И.О.:</u> НЕИЗВЕСТНАЯ\n'
         else:
             self.full_name = (
                 '<u>Ф.И.О.:</u> '
