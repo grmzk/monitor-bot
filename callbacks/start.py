@@ -22,13 +22,7 @@ async def start(update: Update, _) -> int:
                 f'Здравствуйте, {user.get_full_name()}!'
             )
             return ConversationHandler.END
-    await update.message.reply_text(
-        'Для доступа передайте следующую информацию:\n'
-        '- Ф.И.О.\n'
-        '- Телефонный номер\n'
-        '- Отделение\n\n'
-        'Введите вашу ФАМИЛИЮ (только ФАМИЛИЮ!):\n',
-    )
+    await update.message.reply_text('Введите ВАШУ фамилию:')
     return FAMILY
 
 
