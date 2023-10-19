@@ -189,7 +189,7 @@ class PatientInfo:
             f'{self.reanimation_hole}'
             f'{self.admission_date}'
             f'{self.department}'
-            f'{self.admission_diagnosis}'
+            f'{self.admission_diagnosis or self.incoming_diagnosis}'
             f'{self.result}'
             f'{self.doctor}'
         )
