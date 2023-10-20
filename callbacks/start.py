@@ -5,10 +5,10 @@ from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup, ReplyKeyboardRemove, Update)
 from telegram.ext import ContextTypes, ConversationHandler
 
-from classes.users import (User, get_admin, get_departments, get_users,
-                           insert_user, set_enable)
+from classes.users import (User, get_admin_users, get_departments, get_user,
+                           get_users, insert_user, set_enable)
 from constants import DEPARTMENT, FAMILY, NAME, PHONE, SURNAME
-from utils import build_menu, send_message
+from utils import build_menu, delete_calling_message, send_message
 
 NEW_USERS = dict()
 
@@ -142,24 +142,25 @@ async def start_department(update: Update,
                 chat_id=chat_id,
                 telegram_full_name=user_data['telegram_full_name'])
     if insert_user(user):
-        admin = get_admin()
+        admin_users = get_admin_users()
         button_list = [
             InlineKeyboardButton(
                 'Активировать',
                 callback_data=f'activate {chat_id}')
         ]
         reply_markup = InlineKeyboardMarkup(build_menu(button_list, n_cols=1))
-        await send_message(
-            context.bot, admin,
-            'ДОБАВИЛСЯ НОВЫЙ ПОЛЬЗОВАТЕЛЬ\n'
-            '============================\n'
-            f'Ф.И.О.: {user.get_full_name()}\n'
-            f'Отделение: {message}\n'
-            f'Телефон: {user.phone}\n'
-            f'CHAT_ID: {chat_id}\n'
-            f'TG Ф.И.О.: {user.telegram_full_name}\n',
-            reply_markup=reply_markup
-        )
+        for admin in admin_users:
+            await send_message(
+                context.bot, admin,
+                'ДОБАВИЛСЯ НОВЫЙ ПОЛЬЗОВАТЕЛЬ\n'
+                '============================\n'
+                f'Ф.И.О.: {user.get_full_name()}\n'
+                f'Отделение: {message}\n'
+                f'Телефон: {user.phone}\n'
+                f'CHAT_ID: {chat_id}\n'
+                f'TG Ф.И.О.: {user.telegram_full_name}',
+                reply_markup=reply_markup
+            )
     else:
         await update.message.reply_text(
             'Не удалось добавить вашу учетную запись, попробуйте позже '
@@ -178,17 +179,26 @@ async def start_department(update: Update,
     return ConversationHandler.END
 
 
+@delete_calling_message
 async def activate_user(update: Update,
                         context: ContextTypes.DEFAULT_TYPE) -> None:
     user_chat_id = int(update.callback_query.data.split()[-1])
-    chat_id = update.callback_query.message.chat_id
+    user = get_user(user_chat_id)
+    admin_users = get_admin_users()
     if set_enable(user_chat_id):
-        await context.bot.send_message(
-            chat_id,
-            f'Пользователь с CHAT_ID={user_chat_id} АКТИВИРОВАН'
-        )
-        await context.bot.send_message(
-            user_chat_id,
+        for admin in admin_users:
+            await send_message(
+                context.bot, admin,
+                'ПОЛЬЗОВАТЕЛЬ АКТИВИРОВАН\n'
+                '============================\n'
+                f'Ф.И.О.: {user.get_full_name()}\n'
+                f'Отделение: {user.department}\n'
+                f'Телефон: {user.phone}\n'
+                f'CHAT_ID: {user.chat_id}\n'
+                f'TG Ф.И.О.: {user.telegram_full_name}'
+            )
+        await send_message(
+            context.bot, user,
             '[ВАША УЧЕТНАЯ ЗАПИСЬ АКТИВИРОВАНА]\n\n'
             'Настроить специальный звук для уведомлений '
             'или включить/выключить звуковые оповещения можно в настройках, '
@@ -198,7 +208,14 @@ async def activate_user(update: Update,
             'которое расположено в нижней части экрана слева.'
         )
         return
-    await context.bot.send_message(
-        chat_id,
-        f'Ошибка активации пользователя с CHAT_ID={user_chat_id}'
-    )
+    for admin in admin_users:
+        await send_message(
+            context.bot, admin,
+            'ОШИБКА АКТИВАЦИИ ПОЛЬЗОВАТЕЛЯ\n'
+            '============================\n'
+            f'Ф.И.О.: {user.get_full_name()}\n'
+            f'Отделение: {user.department}\n'
+            f'Телефон: {user.phone}\n'
+            f'CHAT_ID: {user.chat_id}\n'
+            f'TG Ф.И.О.: {user.telegram_full_name}'
+        )

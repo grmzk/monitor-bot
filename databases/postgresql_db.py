@@ -30,17 +30,17 @@ def connect_psql():
 
 
 def pg_select_data(select_query: str,
-                   variables: Union[list, None] = None) -> list:
+                   variables: Union[list, None] = None) -> Union[list, None]:
     connection = connect_psql()
     if not connection:
-        return list()
+        return None
     try:
         cursor = connection.cursor()
         cursor.execute(select_query, vars=variables)
         data = cursor.fetchall()
     except psycopg2.Error as error:
         logging.error(f'PG query ERROR: {error}')
-        return list()
+        return None
     if connection:
         cursor.close()
         connection.close()
