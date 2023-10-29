@@ -1,0 +1,13 @@
+[Unit]
+Description=monitor-bot
+Requires=docker.service
+After=docker.service
+
+[Service]
+User=potrav2
+Restart=always
+ExecStart=/usr/bin/docker-compose --project-directory /home/BSMP1/potrav2/.monitor-bot/infra/ --project-name monitor-bot start
+ExecStop=/usr/bin/docker-compose --project-directory /home/BSMP1/potrav2/.monitor-bot/infra/ --project-name monitor-bot stop
+
+[Install]
+WantedBy=default.target

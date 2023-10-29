@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from typing import Union
@@ -12,14 +11,12 @@ from classes.users import User, get_enabled_users
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
                        OWN_REANIMATION_HOLE)
 from databases.firebird_db import fb_select_data
+from databases.postgresql_db import pg_select_data, pg_write_data
 from utils import build_menu, send_message
 
 load_dotenv()
 
-RETRY_TIME = 60
 DEVELOP = int(os.getenv('DEVELOP'))
-if DEVELOP:
-    RETRY_TIME = 60
 
 
 async def send_message_with_button(bot: Bot, user: User,
@@ -57,58 +54,68 @@ async def send_messages(bot: Bot, patients):
                 await send_message_with_button(bot, user, patient, message)
 
 
-def get_max_card_id() -> Union[int, bool]:
-    select_query = "SELECT id FROM main_card ORDER BY id DESC ROWS 1"
-    data = fb_select_data(select_query)
+def get_main_card_last_id() -> Union[int, bool]:
+    select_query = ("SELECT value "
+                    "FROM variables "
+                    "WHERE name = 'main_card_last_id'")
+    data = pg_select_data(select_query)
     if not data:
         return False
     return data[0][0]
 
 
+def set_main_card_last_id(main_card_last_id: int) -> Union[int, bool]:
+    write_query = (
+        "UPDATE variables "
+        "SET value = %s "
+        "WHERE name = 'main_card_last_id'"
+    )
+    return pg_write_data(write_query, [main_card_last_id])
+
+
 async def start_notifier(context: CallbackContext):
-    max_card_id = get_max_card_id()
+    max_card_id = get_main_card_last_id()
     if not max_card_id:
-        logging.error('NOTIFIER not started!')
+        logging.error('NOTIFIER get_main_card_last_id ERROR!')
         return
-    logging.info('NOTIFIER started...')
-    while True:
-        await asyncio.sleep(RETRY_TIME)
-        select_query = (
-            "SELECT main_card.id_pac, "
-            "       main_card.id, "
-            "       main_card.d_in, "
-            "       main_card.d_out, "
-            "       patient.fm, "
-            "       patient.im, "
-            "       patient.ot, "
-            "       patient.dtr, "
-            "       patient.pol, "
-            "       department.short, "
-            "       main_card.remzal, "
-            "       main_card.dsnapr, "
-            "       main_card.dspriem, "
-            "       main_card.id_dvig, "
-            "       main_card.id_otkaz, "
-            "       inpatient_department.short, "
-            "       doctor.last_name "
-            "           || ' ' || doctor.first_name "
-            "           || ' ' || doctor.middle_name "
-            "FROM main_card "
-            "   LEFT JOIN pacient patient ON main_card.id_pac = patient.id "
-            "   LEFT JOIN priemnic department "
-            "       ON main_card.id_priem = department.id "
-            "   LEFT JOIN priemnic inpatient_department "
-            "       ON main_card.id_gotd = inpatient_department.id "
-            "   LEFT JOIN doctor ON main_card.amb_doc_id = doctor.doctor_id "
-            "WHERE "
-            "   main_card.id > ? "
-            "ORDER BY main_card.id"
-        )
-        patients_data = fb_select_data(select_query, [max_card_id])
-        if not patients_data:
-            continue
-        patients = list()
-        for patient_data in patients_data:
-            patients.append(Patient(*patient_data))
+    select_query = (
+        "SELECT main_card.id_pac, "
+        "       main_card.id, "
+        "       main_card.d_in, "
+        "       main_card.d_out, "
+        "       patient.fm, "
+        "       patient.im, "
+        "       patient.ot, "
+        "       patient.dtr, "
+        "       patient.pol, "
+        "       department.short, "
+        "       main_card.remzal, "
+        "       main_card.dsnapr, "
+        "       main_card.dspriem, "
+        "       main_card.id_dvig, "
+        "       main_card.id_otkaz, "
+        "       inpatient_department.short, "
+        "       doctor.last_name "
+        "           || ' ' || doctor.first_name "
+        "           || ' ' || doctor.middle_name "
+        "FROM main_card "
+        "   LEFT JOIN pacient patient ON main_card.id_pac = patient.id "
+        "   LEFT JOIN priemnic department "
+        "       ON main_card.id_priem = department.id "
+        "   LEFT JOIN priemnic inpatient_department "
+        "       ON main_card.id_gotd = inpatient_department.id "
+        "   LEFT JOIN doctor ON main_card.amb_doc_id = doctor.doctor_id "
+        "WHERE "
+        "   main_card.id > ? "
+        "ORDER BY main_card.id"
+    )
+    patients_data = fb_select_data(select_query, [max_card_id])
+    if not patients_data:
+        return
+    patients = list()
+    for patient_data in patients_data:
+        patients.append(Patient(*patient_data))
+    if not DEVELOP:
         max_card_id = patients[-1].card_id
-        await send_messages(context.bot, patients)
+        set_main_card_last_id(max_card_id)
+    await send_messages(context.bot, patients)

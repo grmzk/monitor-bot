@@ -10,9 +10,9 @@ load_dotenv()
 
 PG_HOST = os.getenv('PG_HOST')
 PG_PORT = int(os.getenv('PG_PORT'))
-PG_DATABASE = os.getenv('PG_DATABASE')
-PG_USER = os.getenv('PG_USER')
-PG_PASSWORD = os.getenv('PG_PASSWORD')
+PG_DATABASE = os.getenv('POSTGRES_DB')
+PG_USER = os.getenv('POSTGRES_USER')
+PG_PASSWORD = os.getenv('POSTGRES_PASSWORD')
 
 
 def connect_psql():

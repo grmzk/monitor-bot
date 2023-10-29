@@ -1,0 +1,26 @@
+version: '3.3'
+
+
+services:
+
+  application:
+    build:
+      context: ../application
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+    env_file:
+      - ./.env
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      - "45432:5432"
+    volumes:
+      - db_value:/var/lib/postgresql/data/
+    env_file:
+      - ./.env
+
+
+volumes:
+  db_value:

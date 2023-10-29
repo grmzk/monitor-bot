@@ -15,13 +15,12 @@ from callbacks.notifications import change_notifications, choose_notifications
 from callbacks.processing import (show_processing_all, show_processing_own,
                                   show_processing_rean)
 from callbacks.simple_commands import delete_messages, send_all, show_settings
-from callbacks.start import (DEPARTMENT, FAMILY, NAME, PHONE, SURNAME,
-                             activate_user, start, start_department,
+from callbacks.start import (activate_user, start, start_department,
                              start_family, start_name, start_phone,
                              start_surname)
 from callbacks.summary import show_summary_today, show_summary_yesterday
 from classes.handlers import EndHandler
-from constants import SHOW
+from constants import DEPARTMENT, FAMILY, NAME, PHONE, SHOW, SURNAME
 from notifier import start_notifier
 
 load_dotenv()
@@ -32,8 +31,10 @@ logging.basicConfig(
 
 TOKEN = os.getenv('TOKEN')
 DEVELOP = int(os.getenv('DEVELOP'))
+RETRY_TIME = 30
 if DEVELOP:
     TOKEN = os.getenv('TOKEN_DEVELOP')
+    RETRY_TIME = 30
 
 
 def main() -> None:
@@ -99,7 +100,7 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(pattern=r'^history \d+$',
                                                  callback=show_history))
 
-    application.job_queue.run_once(start_notifier, 0)
+    application.job_queue.run_repeating(start_notifier, RETRY_TIME)
     application.run_polling()
 
 
