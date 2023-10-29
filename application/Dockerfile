@@ -2,6 +2,8 @@ FROM python:3.10-bookworm
 
 WORKDIR /app
 
+RUN ln -sf /usr/share/zoneinfo/Asia/Omsk /etc/localtime
+
 COPY ./requirements.txt .
 RUN pip3 install pip --upgrade --no-cache-dir
 RUN pip3 install -r requirements.txt --no-cache-dir
