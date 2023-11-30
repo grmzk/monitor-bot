@@ -98,7 +98,7 @@ def gen_summary_messages(start_date: date, user: User) -> List[str]:
     for patient in patients:
         if patient.is_reanimation():
             reanimation_holes += 1
-        if patient.status == STATUS_INPATIENT:
+        if patient.is_inpatient():
             if patient.is_own(user) and patient.is_inpatient_own(user):
                 inpatients_own += 1
             elif (not patient.is_own(user)) and patient.is_inpatient_own(user):
