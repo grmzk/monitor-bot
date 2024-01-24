@@ -4,9 +4,10 @@ from typing import List
 
 from telegram import Update
 
+from callbacks.processing import get_processing_patients_all
 from classes.patients import Patient, PatientInfo
 from classes.users import User, get_user
-from constants import MESSAGE_MAX_SIZE, STATUS_INPATIENT
+from constants import MESSAGE_MAX_SIZE
 from notifier import fb_select_data
 from utils import (delete_calling_message, get_diary_today, private_access,
                    send_message_list)
@@ -87,6 +88,14 @@ def get_summary(start_date: date, user: User) -> List[Patient]:
 
 def gen_summary_messages(start_date: date, user: User) -> List[str]:
     patients = get_summary(start_date, user)
+    patients_processing = list()
+    if start_date == get_diary_today():
+        for patient in get_processing_patients_all():
+            if patient.is_own(user) and (not patient.is_reanimation()):
+                patients_processing.append(patient)
+    patients_amount = len(patients)
+    patients_processing_amount = len(patients_processing)
+    patients.extend(patients_processing)
     message_list = list()
     message_header = (f'ЗА {start_date.strftime("%d.%m.%Y")} '
                       f'ОБРАТИЛИСЬ [{user.get_admission_department()}]:\n')
@@ -112,9 +121,14 @@ def gen_summary_messages(start_date: date, user: User) -> List[str]:
             continue
         message_text += patient_info
     message_list.append(message_text)
+    patients_processing_amount_str = '\n'
+    if start_date == get_diary_today():
+        patients_processing_amount_str = (f' + {patients_processing_amount} '
+                                          '[в процессе]\n')
     message_footer = ('===========================\n'
                       'ВСЕГО ОБРАТИЛОСЬ: '
-                      f'{len(patients) - inpatients_from_other}\n'
+                      f'{patients_amount - inpatients_from_other}'
+                      f'{patients_processing_amount_str}'
                       f'ГОСПИТАЛИЗАЦИИ СВОИХ: {inpatients_own}\n'
                       f'ГОСПИТАЛИЗАЦИИ ОТ ДРУГИХ: {inpatients_from_other}\n'
                       f'ГОСПИТАЛИЗАЦИИ К ДРУГИМ: {inpatients_other}\n'
