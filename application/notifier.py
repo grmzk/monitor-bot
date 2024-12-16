@@ -9,7 +9,7 @@ from telegram.ext import CallbackContext
 from classes.patients import Patient, PatientInfo
 from classes.users import User, get_enabled_users
 from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
-                       OWN_REANIMATION_HOLE)
+                       OWN_REANIMATION_HOLE, VASCULAR_CENTER)
 from databases.firebird_db import fb_select_data
 from databases.postgresql_db import pg_select_data, pg_write_data
 from utils import build_menu, send_message, send_message_admin
@@ -50,6 +50,10 @@ async def send_messages(bot: Bot, patients):
                 continue
             if user.notification_level == ALL_REANIMATION_HOLE:
                 if patient.is_reanimation():
+                    await send_message_with_button(bot, user, patient, message)
+                continue
+            if user.notification_level == VASCULAR_CENTER:
+                if patient.is_vascular_center():
                     await send_message_with_button(bot, user, patient, message)
                 continue
             if user.notification_level == ALL_NOTIFICATIONS:

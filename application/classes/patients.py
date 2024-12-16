@@ -76,6 +76,10 @@ class Patient:
                 or (pattern_therapy.match(self.department)
                     and pattern_therapy.match(user.department)))
 
+    def is_vascular_center(self) -> bool:
+        return (self.department == 'КАРДИОЛОГИЯ'
+                or self.department == 'НЕВРОЛОГИЯ')
+
     def is_inpatient_own(self, user: User) -> bool:
         pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
         pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
