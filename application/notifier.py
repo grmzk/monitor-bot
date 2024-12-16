@@ -12,11 +12,13 @@ from constants import (ALL_NOTIFICATIONS, ALL_REANIMATION_HOLE, OWN_PATIENTS,
                        OWN_REANIMATION_HOLE)
 from databases.firebird_db import fb_select_data
 from databases.postgresql_db import pg_select_data, pg_write_data
-from utils import build_menu, send_message
+from utils import build_menu, send_message, send_message_admin
 
 load_dotenv()
 
 DEVELOP = int(os.getenv('DEVELOP'))
+GET_LAST_ID = int(os.getenv('GET_LAST_ID'))
+SET_LAST_ID = int(os.getenv('SET_LAST_ID'))
 
 
 async def send_message_with_button(bot: Bot, user: User,
@@ -115,7 +117,18 @@ async def start_notifier(context: CallbackContext):
     patients = list()
     for patient_data in patients_data:
         patients.append(Patient(*patient_data))
-    if not DEVELOP:
-        max_card_id = patients[-1].card_id
+    max_card_id = patients[-1].card_id
+    if DEVELOP:
+        if GET_LAST_ID:
+            await send_message_admin(context.bot,
+                                     f"LAST_ID: {get_main_card_last_id()}\n"
+                                     f"LAST_ID in BSMP1_DB: {max_card_id}")
+            return
+        if SET_LAST_ID:
+            set_main_card_last_id(max_card_id)
+            await send_message_admin(context.bot,
+                                     f"LAST_ID was set to {max_card_id}")
+            return
+    else:
         set_main_card_last_id(max_card_id)
     await send_messages(context.bot, patients)

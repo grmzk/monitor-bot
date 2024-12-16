@@ -9,7 +9,7 @@ from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 from classes.to_delete import ToDelete
-from classes.users import User, get_enabled_users
+from classes.users import User, get_admin_users, get_enabled_users
 
 
 async def send_message(bot: Bot,
@@ -32,6 +32,12 @@ async def send_message_all(bot: Bot, message_text: str, reply_markup=None):
     users = get_enabled_users()
     for user in users:
         await send_message(bot, user, message_text, reply_markup)
+
+
+async def send_message_admin(bot: Bot, message_text: str, reply_markup=None):
+    admin_users = get_admin_users()
+    for admin in admin_users:
+        await send_message(bot, admin, message_text, reply_markup)
 
 
 def build_menu(buttons, n_cols,

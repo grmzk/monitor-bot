@@ -86,7 +86,8 @@ def get_summary(start_date: date, user: User) -> List[Patient]:
     return patients
 
 
-def gen_summary_messages(start_date: date, user: User) -> List[str]:
+def gen_summary_messages(start_date: date,  # noqa: C901
+                         user: User) -> List[str]:
     patients = get_summary(start_date, user)
     patients_processing = list()
     if start_date == get_diary_today():
