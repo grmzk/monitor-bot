@@ -20,6 +20,7 @@ load_dotenv()
 DEVELOP = int(os.getenv('DEVELOP'))
 GET_LAST_ID = int(os.getenv('GET_LAST_ID'))
 SET_LAST_ID = int(os.getenv('SET_LAST_ID'))
+DISABLE_NOTIFIER = int(os.getenv('DISABLE_NOTIFIER'))
 
 
 async def send_message_with_button(bot: Bot, user: User,
@@ -128,6 +129,8 @@ async def start_notifier(context: CallbackContext):
         patients.append(Patient(*patient_data))
     max_card_id = patients[-1].card_id
     if DEVELOP:
+        if DISABLE_NOTIFIER:
+            return
         if GET_LAST_ID:
             await send_message_admin(context.bot,
                                      f"LAST_ID: {get_main_card_last_id()}\n"
