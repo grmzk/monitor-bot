@@ -80,6 +80,11 @@ class Patient:
         return (self.department == 'КАРДИОЛОГИЯ'
                 or self.department == 'НЕВРОЛОГИЯ')
 
+    def is_therapy_or_cardiology2(self) -> bool:
+        pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
+        return (self.department == '2 Кардиология'
+                or pattern_therapy.match(self.department))
+
     def is_inpatient_own(self, user: User) -> bool:
         pattern_surgery = re.compile(r'^.* ХИРУРГИЯ$')
         pattern_therapy = re.compile(r'^.* ТЕРАПИЯ$')
@@ -151,7 +156,8 @@ class PatientInfo:
             self.result += REJECTIONS.get(patient.reject,
                                           f'reject={patient.reject}')
         elif patient.status == STATUS_INPATIENT:
-            self.result += f'ГОСПИТАЛИЗАЦИЯ [{patient.inpatient_department.upper()}]'
+            self.result += ('ГОСПИТАЛИЗАЦИЯ '
+                            f'[{patient.inpatient_department.upper()}]')
         else:
             self.result += STATUSES.get(patient.status,
                                         f'status={patient.status}')

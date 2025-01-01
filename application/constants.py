@@ -11,12 +11,14 @@ OWN_REANIMATION_HOLE = 2
 ALL_REANIMATION_HOLE = 3
 ALL_NOTIFICATIONS = 4
 VASCULAR_CENTER = 5
+THERAPY_AND_CARDIOLOGY2 = 6
 
 NOTIFICATION_TITLES = {
     OWN_PATIENTS: 'Пациенты своего отделения',
     OWN_REANIMATION_HOLE: 'Реанимационные залы своего отделения',
     ALL_REANIMATION_HOLE: 'Все реанимационные залы',
     VASCULAR_CENTER: 'Пациенты сосудистого центра',
+    THERAPY_AND_CARDIOLOGY2: 'Терапия + 2-я Кардиология',
     ALL_NOTIFICATIONS: 'Уведомления о всех пациентах',
     NO_NOTIFICATION: 'Отключить все уведомления'
 }
@@ -32,6 +34,9 @@ NOTIFICATION_DESCRIPTIONS = {
     VASCULAR_CENTER: 'будут приходить уведомления о пациентах, '
                      'поступающих за неврологическим '
                      'и кардиологическим отделениями',
+    THERAPY_AND_CARDIOLOGY2: 'будут приходить уведомления о пациентах, '
+                             'поступающих за отделениями: '
+                             '1-я терапия, 2-я терапия и 2-я кардиология',
     ALL_NOTIFICATIONS: 'будут приходить уведомления о всех '
                        'поступающих пациентах во все отделения'
 }

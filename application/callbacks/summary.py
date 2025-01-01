@@ -98,8 +98,8 @@ def gen_summary_messages(start_date: date,  # noqa: C901
     patients_processing_amount = len(patients_processing)
     patients.extend(patients_processing)
     message_list = list()
-    message_header = (f'ЗА {start_date.strftime("%d.%m.%Y")} '
-                      f'ОБРАТИЛИСЬ [{user.get_admission_department().upper()}]:\n')
+    message_header = (f'ЗА {start_date.strftime("%d.%m.%Y")} ОБРАТИЛИСЬ '
+                      f'[{user.get_admission_department().upper()}]:\n')
     message_text = message_header
     inpatients_own = 0
     inpatients_other = 0
