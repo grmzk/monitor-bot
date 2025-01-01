@@ -120,7 +120,7 @@ class PatientInfo:
             )
         else:
             self.admission_outcome_date = ''
-        self.department = f'<u>Отделение:</u> {patient.department}\n'
+        self.department = f'<u>Отделение:</u> {patient.department.upper()}\n'
         if not patient.get_full_name().strip():
             if patient.gender == 'М':
                 self.full_name = '<u>Ф.И.О.:</u> НЕИЗВЕСТНЫЙ\n'
@@ -151,7 +151,7 @@ class PatientInfo:
             self.result += REJECTIONS.get(patient.reject,
                                           f'reject={patient.reject}')
         elif patient.status == STATUS_INPATIENT:
-            self.result += f'ГОСПИТАЛИЗАЦИЯ [{patient.inpatient_department}]'
+            self.result += f'ГОСПИТАЛИЗАЦИЯ [{patient.inpatient_department.upper()}]'
         else:
             self.result += STATUSES.get(patient.status,
                                         f'status={patient.status}')

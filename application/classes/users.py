@@ -183,5 +183,5 @@ def get_departments() -> Union[Dict[int, str], None]:
         return None
     departments = dict()
     for department_data in departments_data:
-        departments[int(department_data[0])] = department_data[1]
+        departments[int(department_data[0])] = department_data[1].upper()
     return departments

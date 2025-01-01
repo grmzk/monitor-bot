@@ -23,7 +23,7 @@ async def show_inpatients(update: Update, start_date: date) -> None:
             inpatients.append(patient)
     message_header = (
         f'ЗА {start_date.strftime("%d.%m.%Y")} '
-        f'ГОСПИТАЛИЗИРОВАНО [{user.get_admission_department()}]:\n'
+        f'ГОСПИТАЛИЗИРОВАНО [{user.get_admission_department().upper()}]:\n'
     )
     to_delete.add(
         await update.message.reply_text(message_header,

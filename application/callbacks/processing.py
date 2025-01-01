@@ -101,9 +101,9 @@ def get_processing_info_own(user: User) -> List[str]:
             patients.append(patient)
     message_list = list()
     message_header = (f'СЕЙЧАС ОБСЛЕДУЮТСЯ '
-                      f'[{user.get_admission_department()}]\n')
+                      f'[{user.get_admission_department().upper()}]\n')
     message_footer = ('===========================\n'
-                      f'[{user.get_admission_department()}]\n'
+                      f'[{user.get_admission_department().upper()}]\n'
                       f'ВСЕГО ОБСЛЕДУЮТСЯ: {len(patients)}\n')
     message_text = message_header
     reanimation_holes = 0
