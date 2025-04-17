@@ -1,6 +1,4 @@
 starter.sh
-firebird-utils-*/
-libfbclient-*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -107,7 +105,7 @@ celerybeat.pid
 
 # Environments
 .env
-.venv
+.venv/
 env/
 venv/
 ENV/

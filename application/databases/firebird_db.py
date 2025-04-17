@@ -52,8 +52,8 @@ def connect_fdb():
             connection_class=MyConnection,
             fb_library_name=FB_LIBRARY_NAME
         )
-    except fdb.Error as error:
-        logging.error(f'FB connect ERROR: {error}')
+    except Exception as error:
+        logging.error(f'FDB CONNECT: {error}')
         return None
     return connection
 
@@ -63,15 +63,15 @@ def fb_select_data(select_query: str,
     connection = connect_fdb()
     if not connection:
         return list()
+    cursor = connection.cursor()
     try:
-        cursor = connection.cursor()
         cursor.execute(select_query, parameters=parameters)
         data = cursor.fetchall()
-    except fdb.Error as error:
-        logging.error(f'FB query ERROR: {error}')
+    except Exception as error:
+        logging.error(f'FDB QUERY: {error}')
         return list()
-    if connection:
+    finally:
         cursor.close()
         connection.close()
-        logging.info('FB query complete SUCCESS')
+    logging.info('FDB QUERY SUCCESS')
     return data
