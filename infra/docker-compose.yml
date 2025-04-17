@@ -1,6 +1,3 @@
-version: '3.3'
-
-
 services:
 
   application:
@@ -13,7 +10,7 @@ services:
       - ./.env
 
   db:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     ports:
       - "45432:5432"
     volumes:

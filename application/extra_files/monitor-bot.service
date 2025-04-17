@@ -5,10 +5,10 @@ After=docker.service
 
 [Service]
 Type=forking
-User=potrav2
+User=ivmuzykin
 Restart=always
-ExecStart=/usr/bin/docker-compose --project-directory /home/BSMP1/potrav2/.monitor-bot/infra/ --file /home/BSMP1/potrav2/.monitor-bot/infra/docker-compose.yml --project-name monitor-bot start
-ExecStop=/usr/bin/docker-compose --project-directory /home/BSMP1/potrav2/.monitor-bot/infra/ --file /home/BSMP1/potrav2/.monitor-bot/infra/docker-compose.yml --project-name monitor-bot stop
+ExecStart=/usr/bin/docker compose --project-directory /home/BSMP1/ivmuzykin/.monitor-bot/infra/ --file /home/BSMP1/ivmuzykin/.monitor-bot/infra/docker-compose.yml --project-name monitor-bot up -d
+ExecStop=/usr/bin/docker compose --project-directory /home/BSMP1/ivmuzykin/.monitor-bot/infra/ --file /home/BSMP1/ivmuzykin/.monitor-bot/infra/docker-compose.yml --project-name monitor-bot down
 TimeoutSec=0
 StandardOutput=tty
 RemainAfterExit=yes
