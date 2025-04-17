@@ -23,7 +23,7 @@ def connect_psql():
                                       user=PG_USER,
                                       password=PG_PASSWORD)
         connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-    except psycopg2.Error as error:
+    except Exception as error:
         logging.error(f'PG CONNECT: {error}')
         return None
     return connection
@@ -38,7 +38,7 @@ def pg_select_data(select_query: str,
         cursor = connection.cursor()
         cursor.execute(select_query, vars=variables)
         data = cursor.fetchall()
-    except psycopg2.Error as error:
+    except Exception as error:
         logging.error(f'PG QUERY: {error}')
         return None
     if connection:
@@ -56,7 +56,7 @@ def pg_write_data(write_query: str,
         cursor = connection.cursor()
         cursor.execute(write_query + ' RETURNING id', vars=variables)
         query_id = cursor.fetchone()[0]
-    except psycopg2.Error as error:
+    except Exception as error:
         logging.error(f'PG QUERY: {error}')
         return False
     if connection:
