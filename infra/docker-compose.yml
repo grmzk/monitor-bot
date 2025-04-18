@@ -4,6 +4,7 @@ services:
     build:
       context: ../application
       dockerfile: Dockerfile
+    restart: always
     depends_on:
       - db
     env_file:
@@ -13,6 +14,7 @@ services:
     image: postgres:16-alpine
     ports:
       - "45432:5432"
+    restart: always
     volumes:
       - db_value:/var/lib/postgresql/data/
     env_file:
