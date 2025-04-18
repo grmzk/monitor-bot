@@ -48,13 +48,9 @@ async def check_date_from_message(update: Update,
     to_delete.add(update.message)
     pattern = re.compile(r'^\d\d\.\d\d\.\d\d\d\d$')
     if not pattern.match(message_text):
-        to_delete.add(
-            await update.message.reply_text(
-                'Дата введена неверно.\n'
-                'Попробуйте ещё раз:'
-            )
-        )
-        return SHOW
+        await to_delete.final_delete(context.bot)
+        await update.message.reply_text('Дата введена неверно.')
+        return ConversationHandler.END
     start_date = datetime.strptime(message_text, '%d.%m.%Y').date()
     await context.user_data['show_function'](update, start_date)
     await to_delete.final_delete(context.bot)
