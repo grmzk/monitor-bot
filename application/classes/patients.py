@@ -99,17 +99,6 @@ class Patient:
 
 
 class PatientInfo:
-    reanimation_hole: str
-    admission_date: str
-    admission_outcome_date: str
-    department: str
-    full_name: str
-    birthday: str
-    incoming_diagnosis: str
-    admission_diagnosis: str
-    result: str
-    doctor: str
-
     def __init__(self, patient: Patient):
         if patient.is_reanimation():
             self.reanimation_hole = '<u>[РЕАНИМАЦИОННЫЙ ЗАЛ]</u>\n'
