@@ -1,0 +1,4 @@
+Dockerfile
+.env
+.venv/
+extra_files/
