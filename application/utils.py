@@ -68,7 +68,12 @@ def delete_calling_message(coroutine):
                       context: ContextTypes.DEFAULT_TYPE):
         message = update.message or update.callback_query.message
         await coroutine(update, context)
-        await context.bot.delete_message(message.chat_id, message.message_id)
+        try:
+            await context.bot.delete_message(
+                message.chat_id, message.message_id
+            )
+        except TelegramError as error:
+            logging.error(f'utils.py/delete_calling_message: {error}')
     return wrapper
 
 
