@@ -17,7 +17,9 @@ if DEVELOP:
 
 
 class ToDelete:
-    def __init__(self, to_delete_id: int = None, chat_id: int = None):
+    def __init__(self,
+                 to_delete_id: int | None = None,
+                 chat_id: int | None = None):
         if to_delete_id and chat_id:
             raise ValueError('ToDelete: Two initial arguments are '
                              'specified together, but one was expected')
