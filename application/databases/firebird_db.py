@@ -62,16 +62,19 @@ def fb_select_data(select_query: str,
                    parameters: Union[list, None] = None) -> list:
     connection = connect_fdb()
     if not connection:
-        return list()
+        return []
     cursor = connection.cursor()
     try:
         cursor.execute(select_query, parameters=parameters)
         data = cursor.fetchall()
     except Exception as error:
         logging.error(f'FDB QUERY: {error}')
-        return list()
+        return []
     finally:
-        cursor.close()
-        connection.close()
+        try:
+            cursor.close()
+            connection.close()
+        except Exception as error:
+            logging.error(f'FDB CLOSE: {error}')
     logging.info('FDB QUERY SUCCESS')
     return data
